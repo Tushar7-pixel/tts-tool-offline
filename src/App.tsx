@@ -10,6 +10,7 @@ export default function App() {
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
+  const [gotoInput, setGotoInput] = useState<string>("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeLineRef = useRef<HTMLDivElement | null>(null);
@@ -24,6 +25,24 @@ export default function App() {
     loadBooks();
   }, []);
 
+  // Keep the input value in sync when the reader turns the page
+
+  const handlePageJump = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeBook) return;
+
+    const targetPage = parseInt(gotoInput, 10);
+    if (
+      !isNaN(targetPage) &&
+      targetPage >= 1 &&
+      targetPage <= activeBook.totalPages
+    ) {
+      jumpTo(targetPage - 1, 0);
+    } else {
+      // Revert to current page if invalid input is entered
+      setGotoInput(String(currentPage + 1));
+    }
+  };
   const handleInstallVoice = async () => {
     setDownloadPct(0);
     await downloadVoice(setDownloadPct);
@@ -79,6 +98,11 @@ export default function App() {
       block: "center",
     });
   }, [currentLine, currentPage]);
+  useEffect(() => {
+    if (activeBook) {
+      setGotoInput(String(currentPage + 1));
+    }
+  }, [currentPage, activeBook]);
 
   const displayedLines = activeBook?.pages[currentPage] || [];
 
@@ -107,7 +131,7 @@ export default function App() {
             </span>
           </div>
 
-          {/* Center: Pagination controls */}
+          {/* Center: Pagination controls
           {activeBook && (
             <div className="flex items-center gap-2 bg-[#1b1e24] border border-[#2e323e] px-2.5 py-1.5 rounded-md">
               <button
@@ -133,6 +157,59 @@ export default function App() {
                 Next ▶
               </button>
             </div>
+          )} */}
+          {/* Center: Pagination & Go-To Controls */}
+          {activeBook && (
+            <form
+              onSubmit={handlePageJump}
+              className="flex items-center gap-1.5 bg-[#1b1e24] border border-[#2e323e] px-2 py-1 rounded-md"
+            >
+              <button
+                type="button"
+                disabled={currentPage === 0}
+                onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
+                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
+              >
+                ◀ Prev
+              </button>
+
+              <div className="flex items-center gap-1 px-1">
+                <span className="text-zinc-500 text-xs select-none">Pg</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={activeBook.totalPages}
+                  value={gotoInput}
+                  onChange={(e) => setGotoInput(e.target.value)}
+                  onBlur={handlePageJump}
+                  className="w-12 bg-[#121316] border border-[#353945] rounded text-center text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 py-0.5 font-mono"
+                />
+                <span className="text-xs text-zinc-500 font-normal">
+                  / {activeBook.totalPages}
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                className="bg-[#242731] hover:bg-[#2e323e] border border-[#3c4150] text-zinc-200 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer transition"
+              >
+                Go
+              </button>
+
+              <button
+                type="button"
+                disabled={currentPage >= activeBook.totalPages - 1}
+                onClick={() =>
+                  jumpTo(
+                    Math.min(activeBook.totalPages - 1, currentPage + 1),
+                    0,
+                  )
+                }
+                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
+              >
+                Next ▶
+              </button>
+            </form>
           )}
 
           {/* Right Action Controls */}
