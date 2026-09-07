@@ -52,3 +52,8 @@ export async function updateBookProgress(
         await db.put(STORE_NAME, book);
     }
 }
+// In src/utils/db.ts
+export async function deleteBook(id: string): Promise<void> {
+    const db = await getDB();
+    await db.delete(STORE_NAME, id);
+}

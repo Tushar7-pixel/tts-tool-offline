@@ -2,7 +2,14 @@
 import React, { useState, useEffect, useRef } from "react";
 import { extractPdfPages } from "./utils/pdf";
 import { isVoiceInstalled, downloadVoice } from "./utils/tts";
-import { saveBook, getAllBooks, getBook, type BookDoc } from "./utils/db";
+import { BookShelf } from "./components/BookShelf";
+import {
+  saveBook,
+  getAllBooks,
+  getBook,
+  type BookDoc,
+  deleteBook,
+} from "./utils/db";
 import { useReader } from "./hooks/useReader";
 
 export default function App() {
@@ -25,8 +32,15 @@ export default function App() {
     loadBooks();
   }, []);
 
-  // Keep the input value in sync when the reader turns the page
+  const handleDeleteBook = async (id: string) => {
+    await deleteBook(id);
+    if (activeBook?.id === id) {
+      setActiveBook(null);
+    }
+    await loadBooks();
+  };
 
+  // Keep the input value in sync when the reader turns the page
   const handlePageJump = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeBook) return;
@@ -105,7 +119,56 @@ export default function App() {
   }, [currentPage, activeBook]);
 
   const displayedLines = activeBook?.pages[currentPage] || [];
+  // Inside src/App.tsx
 
+  const handleAddOrUploadBook = async (file: File) => {
+    const cleanTitle = file.name.replace(/\.pdf$/i, "");
+
+    // Find any existing book with the exact same title
+    const existingBook = books.find(
+      (b) => b.title.toLowerCase() === cleanTitle.toLowerCase(),
+    );
+
+    if (existingBook) {
+      const shouldReplace = window.confirm(
+        `"${cleanTitle}" already exists on your shelf.\n\nDo you want to replace it? (Progress will reset to Page 1)`,
+      );
+
+      if (!shouldReplace) return;
+
+      // Parse newly provided file and reset reading index to 0
+      const pages = await extractPdfPages(file);
+      const replacedBook: BookDoc = {
+        ...existingBook,
+        pages,
+        totalPages: pages.length,
+        currentPage: 0,
+        currentLine: 0,
+        updatedAt: Date.now(),
+      };
+
+      await saveBook(replacedBook);
+      await loadBooks();
+      setActiveBook(replacedBook);
+      return;
+    }
+
+    // Add brand new book
+    const pages = await extractPdfPages(file);
+    const newBook: BookDoc = {
+      id: `${cleanTitle}_${Date.now()}`,
+      title: cleanTitle,
+      pages,
+      totalPages: pages.length,
+      currentPage: 0,
+      currentLine: 0,
+      updatedAt: Date.now(),
+    };
+
+    await saveBook(newBook);
+    await loadBooks();
+    setActiveBook(newBook);
+  };
   return (
     <div className="min-h-screen bg-[#0e0f12] text-[#d4d4d8] flex flex-col font-mono selection:bg-emerald-950 selection:text-emerald-300">
       {/* Top Navbar Section */}
@@ -117,8 +180,11 @@ export default function App() {
               type="file"
               ref={fileInputRef}
               accept="application/pdf"
-              style={{ display: "none" }}
-              onChange={handleFileUpload}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAddOrUploadBook(file);
+              }}
             />
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -312,87 +378,18 @@ export default function App() {
 
         {/* Saved Books / Shelf Section with Border Frame */}
         <aside className="lg:col-span-4 flex flex-col">
-          <div className="bg-[#13151a] border border-[#2b2e38] rounded-lg shadow-xl overflow-hidden flex flex-col">
-            <div className="bg-[#181a20] border-b border-[#2b2e38] px-4 py-3 flex items-center justify-between">
-              <h2 className="text-xs uppercase tracking-wider font-bold text-zinc-300">
-                Book Shelf
-              </h2>
-              <span className="text-[11px] bg-[#242731] border border-[#353945] text-zinc-400 px-2 py-0.5 rounded">
-                {books.length} Saved
-              </span>
-            </div>
-
-            <div className="p-4">
-              {books.length === 0 ? (
-                <p className="text-xs text-zinc-500 py-8 text-center">
-                  No cached documents found.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="text-zinc-500 border-b border-[#242731]">
-                        <th className="pb-2 font-medium">Title</th>
-                        <th className="pb-2 text-right font-medium">
-                          Progress
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#1e2129]">
-                      {books.map((b) => {
-                        const isSelected = b.id === activeBook?.id;
-                        const activePage = isSelected
-                          ? currentPage
-                          : b.currentPage;
-                        const progressPct = Math.round(
-                          ((activePage + 1) / b.totalPages) * 100,
-                        );
-
-                        return (
-                          <tr
-                            key={b.id}
-                            onClick={() => {
-                              setActiveBook(b);
-                              loadBooks();
-                            }}
-                            className={`cursor-pointer transition ${
-                              isSelected
-                                ? "bg-[#12241b] text-emerald-300"
-                                : "hover:bg-[#181a22] text-zinc-400"
-                            }`}
-                          >
-                            <td className="py-3 pr-3">
-                              <div className="truncate max-w-[150px] font-medium text-zinc-300">
-                                {b.title}
-                              </div>
-                              <div className="w-full bg-[#20232c] h-1.5 rounded mt-2 overflow-hidden border border-[#2b2e38]">
-                                <div
-                                  className="bg-emerald-500 h-full transition-all duration-300"
-                                  style={{ width: `${progressPct}%` }}
-                                />
-                              </div>
-                            </td>
-                            <td className="py-3 text-right tabular-nums align-top">
-                              <div className="text-zinc-300">
-                                {activePage + 1}
-                                <span className="text-zinc-500 font-normal">
-                                  {" "}
-                                  / {b.totalPages}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-zinc-500">
-                                {progressPct}%
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
+          <BookShelf
+            books={books}
+            activeBookId={activeBook?.id || null}
+            currentPage={currentPage}
+            onSelectBook={(book) => {
+              setActiveBook(book);
+              loadBooks();
+            }}
+            onDeleteBook={handleDeleteBook}
+            onAddBook={handleAddOrUploadBook}
+            pageSize={5}
+          />
         </aside>
       </div>
     </div>
