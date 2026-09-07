@@ -2,15 +2,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { extractPdfPages } from "./utils/pdf";
 import { isVoiceInstalled, downloadVoice } from "./utils/tts";
-import { BookShelf } from "./components/BookShelf";
-import {
-  saveBook,
-  getAllBooks,
-  getBook,
-  type BookDoc,
-  deleteBook,
-} from "./utils/db";
+import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
+import { BookShelf } from "./components/bookshelf";
 
 export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
@@ -62,34 +56,6 @@ export default function App() {
     await downloadVoice(setDownloadPct);
     setVoiceReady(true);
     setDownloadPct(null);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const id = `${file.name}_${file.size}`;
-    const cached = await getBook(id);
-
-    if (cached) {
-      setActiveBook(cached);
-      return;
-    }
-
-    const pages = await extractPdfPages(file);
-    const newBook: BookDoc = {
-      id,
-      title: file.name.replace(/\.pdf$/i, ""),
-      pages,
-      totalPages: pages.length,
-      currentPage: 0,
-      currentLine: 0,
-      updatedAt: Date.now(),
-    };
-
-    await saveBook(newBook);
-    await loadBooks();
-    setActiveBook(newBook);
   };
 
   const {
