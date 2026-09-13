@@ -13,6 +13,8 @@ export default function App() {
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
   const [gotoInput, setGotoInput] = useState<string>("");
   const [fontSize, setFontSize] = useState(15);
+  const [navbarHidden, setNavbarHidden] = useState(false);
+  const [compactChrome, setCompactChrome] = useState(false);
 
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
@@ -28,6 +30,26 @@ export default function App() {
   useEffect(() => {
     isVoiceInstalled().then(setVoiceReady);
     loadBooks();
+  }, []);
+
+  useEffect(() => {
+    const updateChrome = () => {
+      const mobile = window.matchMedia("(max-width: 1023px)").matches;
+      const landscapeShort = window.matchMedia(
+        "(orientation: landscape) and (max-height: 560px)",
+      ).matches;
+      const compact = mobile || landscapeShort;
+      setCompactChrome(compact);
+      if (!compact) setNavbarHidden(false);
+    };
+
+    updateChrome();
+    window.addEventListener("resize", updateChrome);
+    window.addEventListener("orientationchange", updateChrome);
+    return () => {
+      window.removeEventListener("resize", updateChrome);
+      window.removeEventListener("orientationchange", updateChrome);
+    };
   }, []);
 
   const handleDeleteBook = async (id: string) => {
@@ -171,7 +193,11 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0e0f12] text-[#d4d4d8] flex flex-col font-mono selection:bg-emerald-950 selection:text-emerald-300">
       {/* Top Navbar Section */}
-      <header className="sticky top-0 z-30 bg-[#15171c] border-b border-[#2a2d35] px-4 py-3">
+      <header
+        className={`sticky top-0 z-30 bg-[#15171c] border-b border-[#2a2d35] px-4 py-3 ${
+          navbarHidden ? "hidden" : ""
+        }`}
+      >
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* File Upload Button + Active Title */}
           <div className="flex items-center gap-3 min-w-0">
@@ -325,8 +351,41 @@ export default function App() {
               {speed.toFixed(1)}×
             </span>
           </div>
+          {compactChrome && (
+            <button
+              type="button"
+              onClick={() => setNavbarHidden(true)}
+              className="bg-[#1b1e24] hover:bg-[#2e323e] border border-[#2e323e] text-zinc-300 text-[11px] font-semibold px-2.5 py-1.5 rounded-md cursor-pointer shrink-0"
+            >
+              Hide nav
+            </button>
+          )}
         </div>
       </header>
+
+      {navbarHidden && compactChrome && (
+        <div className="fixed top-2 right-2 z-40 flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={togglePlay}
+            disabled={!activeBook || !voiceReady}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${
+              isPlaying
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                : "bg-emerald-600 text-white disabled:opacity-25"
+            }`}
+          >
+            {isPlaying ? "⏸" : "▶"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setNavbarHidden(false)}
+            className="bg-[#15171c] text-zinc-200 border border-[#3c4150] text-[11px] font-semibold px-2.5 py-1.5 rounded-md shadow-lg cursor-pointer"
+          >
+            Show nav
+          </button>
+        </div>
+      )}
 
       {/* Two-Column App Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
