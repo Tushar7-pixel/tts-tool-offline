@@ -7,7 +7,8 @@ const STORE_NAME = 'books';
 export type BookDoc = {
     id: string;
     title: string;
-    pages: string[][]; // Array of pages, each containing an array of sentence lines
+    pages: string[][]; // TTS sentences per page
+    displayPages?: string[][]; // PDF visual lines per page (display only)
     totalPages: number;
     currentPage: number;
     currentLine: number;

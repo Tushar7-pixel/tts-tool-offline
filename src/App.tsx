@@ -1,6 +1,6 @@
 // src/App.tsx
-import React, { useState, useEffect, useRef } from "react";
-import { extractPdfPages } from "./utils/pdf";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { extractPdfPages, mapDisplayToSentences } from "./utils/pdf";
 import { isVoiceInstalled, downloadVoice } from "./utils/tts";
 import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
@@ -61,6 +61,8 @@ export default function App() {
   const {
     currentPage,
     currentLine,
+    queuedLines,
+    processedLines,
     isPlaying,
     speed,
     setSpeed,
@@ -84,7 +86,32 @@ export default function App() {
     }
   }, [currentPage, activeBook]);
 
-  const displayedLines = activeBook?.pages[currentPage] || [];
+  const ttsLines = activeBook?.pages[currentPage] || [];
+  const displayedLines =
+    activeBook?.displayPages?.[currentPage] || ttsLines;
+  const { displayToSentence } = useMemo(
+    () => mapDisplayToSentences(displayedLines, ttsLines),
+    [displayedLines, ttsLines],
+  );
+  const firstCurrentDisplayIdx = useMemo(
+    () =>
+      displayedLines.findIndex((_, i) =>
+        (displayToSentence[i] || []).includes(currentLine),
+      ),
+    [displayedLines, displayToSentence, currentLine],
+  );
+
+  const handleDisplayLineClick = (displayIdx: number) => {
+    const hits = displayToSentence[displayIdx] || [];
+    if (hits.length === 0) return;
+    const nextOnLine = hits.find((s) => s > currentLine);
+    if (hits.includes(currentLine) && nextOnLine !== undefined) {
+      jumpTo(currentPage, nextOnLine);
+      return;
+    }
+    jumpTo(currentPage, hits[0]);
+  };
+
   // Inside src/App.tsx
 
   const handleAddOrUploadBook = async (file: File) => {
@@ -103,11 +130,12 @@ export default function App() {
       if (!shouldReplace) return;
 
       // Parse newly provided file and reset reading index to 0
-      const pages = await extractPdfPages(file);
+      const extracted = await extractPdfPages(file);
       const replacedBook: BookDoc = {
         ...existingBook,
-        pages,
-        totalPages: pages.length,
+        pages: extracted.pages,
+        displayPages: extracted.displayPages,
+        totalPages: extracted.pages.length,
         currentPage: 0,
         currentLine: 0,
         updatedAt: Date.now(),
@@ -120,12 +148,13 @@ export default function App() {
     }
 
     // Add brand new book
-    const pages = await extractPdfPages(file);
+    const extracted = await extractPdfPages(file);
     const newBook: BookDoc = {
       id: `${cleanTitle}_${Date.now()}`,
       title: cleanTitle,
-      pages,
-      totalPages: pages.length,
+      pages: extracted.pages,
+      displayPages: extracted.displayPages,
+      totalPages: extracted.pages.length,
       currentPage: 0,
       currentLine: 0,
       updatedAt: Date.now(),
@@ -306,33 +335,48 @@ export default function App() {
                 ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                 : "Document View"}
             </span>
-            <span>{displayedLines.length} Sentences</span>
+            <span>{displayedLines.length} lines</span>
           </div>
 
-          <div className="p-6 md:p-8 space-y-3 flex-1 overflow-y-auto max-h-[75vh]">
+          <div className="p-6 md:p-10 flex-1 overflow-y-auto max-h-[75vh]">
             {activeBook ? (
-              displayedLines.map((line, idx) => {
-                const isCurrent = idx === currentLine;
-                return (
-                  <div
-                    key={idx}
-                    ref={isCurrent ? activeLineRef : null}
-                    onClick={() => jumpTo(currentPage, idx)}
-                    className={`flex items-start gap-4 p-3 rounded-md transition cursor-pointer border ${
-                      isCurrent
-                        ? "bg-[#10261b] border-emerald-500/60 text-emerald-200 shadow-md"
-                        : "border-transparent hover:border-[#2b2e38] hover:bg-[#181a22] text-zinc-400"
-                    }`}
-                  >
-                    <span className="text-[11px] font-mono text-zinc-600 select-none pt-1 shrink-0 w-6 text-right">
-                      {idx + 1}
-                    </span>
-                    <p className="text-[14px] leading-relaxed font-sans text-left flex-1 select-text">
-                      {line}
-                    </p>
-                  </div>
-                );
-              })
+              <div className="font-sans text-[15px] leading-7 text-left max-w-3xl">
+                {displayedLines.map((line, idx) => {
+                  const sentenceHits = displayToSentence[idx] || [];
+                  const isCurrent = sentenceHits.includes(currentLine);
+                  const isQueued =
+                    !isCurrent &&
+                    sentenceHits.some((s) => queuedLines.includes(s));
+                  const isProcessed =
+                    !isCurrent &&
+                    !isQueued &&
+                    sentenceHits.some((s) => processedLines.includes(s));
+                  const isFirstCurrent = idx === firstCurrentDisplayIdx;
+
+                  return (
+                    <div
+                      key={idx}
+                      ref={isFirstCurrent ? activeLineRef : null}
+                      onClick={() => handleDisplayLineClick(idx)}
+                      className={`px-2 py-0.5 rounded-sm cursor-pointer transition ${
+                        isCurrent
+                          ? "bg-[#10261b] text-emerald-200"
+                          : isQueued
+                            ? "bg-[#101826] text-sky-200"
+                            : isProcessed
+                              ? "text-zinc-300"
+                              : "text-zinc-500 hover:bg-[#181a22]"
+                      }`}
+                    >
+                      {line.length > 0 ? (
+                        line
+                      ) : (
+                        <span className="block h-4">&nbsp;</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center text-zinc-500 text-sm space-y-2">
                 <span className="text-2xl">📄</span>
