@@ -12,6 +12,10 @@ export default function App() {
   const [voiceReady, setVoiceReady] = useState(false);
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
   const [gotoInput, setGotoInput] = useState<string>("");
+  const [fontSize, setFontSize] = useState(15);
+
+  const MIN_FONT_SIZE = 12;
+  const MAX_FONT_SIZE = 28;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeLineRef = useRef<HTMLDivElement | null>(null);
@@ -335,12 +339,47 @@ export default function App() {
                 ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                 : "Document View"}
             </span>
-            <span>{displayedLines.length} lines</span>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-[#1b1e24] border border-[#2e323e] px-1.5 py-0.5 rounded-md">
+                <button
+                  type="button"
+                  aria-label="Decrease font size"
+                  disabled={fontSize <= MIN_FONT_SIZE}
+                  onClick={() =>
+                    setFontSize((size) => Math.max(MIN_FONT_SIZE, size - 1))
+                  }
+                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-[#2e323e] rounded disabled:opacity-25 cursor-pointer"
+                >
+                  A−
+                </button>
+                <span className="text-emerald-400 font-mono font-bold w-8 text-center tabular-nums">
+                  {fontSize}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Increase font size"
+                  disabled={fontSize >= MAX_FONT_SIZE}
+                  onClick={() =>
+                    setFontSize((size) => Math.min(MAX_FONT_SIZE, size + 1))
+                  }
+                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-[#2e323e] rounded disabled:opacity-25 cursor-pointer"
+                >
+                  A+
+                </button>
+              </div>
+              <span>{displayedLines.length} lines</span>
+            </div>
           </div>
 
-          <div className="p-6 md:p-10 flex-1 overflow-y-auto max-h-[75vh]">
+          <div className="px-2 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto max-h-[75vh]">
             {activeBook ? (
-              <div className="font-sans text-[15px] leading-7 text-left max-w-3xl">
+              <div
+                className="font-sans text-left max-w-3xl"
+                style={{
+                  fontSize: `${fontSize}px`,
+                  lineHeight: 1.7,
+                }}
+              >
                 {displayedLines.map((line, idx) => {
                   const sentenceHits = displayToSentence[idx] || [];
                   const isCurrent = sentenceHits.includes(currentLine);
@@ -358,7 +397,7 @@ export default function App() {
                       key={idx}
                       ref={isFirstCurrent ? activeLineRef : null}
                       onClick={() => handleDisplayLineClick(idx)}
-                      className={`px-2 py-0.5 rounded-sm cursor-pointer transition ${
+                      className={`px-1 sm:px-2 py-0.5 rounded-sm cursor-pointer transition ${
                         isCurrent
                           ? "bg-[#10261b] text-emerald-200"
                           : isQueued
@@ -371,7 +410,7 @@ export default function App() {
                       {line.length > 0 ? (
                         line
                       ) : (
-                        <span className="block h-4">&nbsp;</span>
+                        <span className="block h-[1em]">&nbsp;</span>
                       )}
                     </div>
                   );
