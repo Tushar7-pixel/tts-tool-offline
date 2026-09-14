@@ -5,6 +5,17 @@ import { isVoiceInstalled, downloadVoice } from "./utils/tts";
 import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
 import { BookShelf } from "./components/bookshelf";
+import { AppearanceMenu } from "./components/appearanceMenu";
+import {
+  getReaderFont,
+  loadGoogleFont,
+  loadReaderFontId,
+  loadReaderTheme,
+  saveReaderFontId,
+  saveReaderTheme,
+  type ReaderFontId,
+  type ReaderTheme,
+} from "./utils/readerAppearance";
 
 export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
@@ -15,6 +26,9 @@ export default function App() {
   const [fontSize, setFontSize] = useState(15);
   const [navbarHidden, setNavbarHidden] = useState(false);
   const [compactChrome, setCompactChrome] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
+  const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
 
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
@@ -26,6 +40,15 @@ export default function App() {
     const list = await getAllBooks();
     setBooks(list.sort((a, b) => b.updatedAt - a.updatedAt));
   };
+
+  useEffect(() => {
+    const font = getReaderFont(fontId);
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.setProperty("--reader-font", font.cssFamily);
+    saveReaderTheme(theme);
+    saveReaderFontId(fontId);
+    if (font.googleHref) loadGoogleFont(font.googleHref);
+  }, [theme, fontId]);
 
   useEffect(() => {
     isVoiceInstalled().then(setVoiceReady);
@@ -138,7 +161,7 @@ export default function App() {
     jumpTo(currentPage, hits[0]);
   };
 
-  // Inside src/App.tsx
+  const readerFont = getReaderFont(fontId);
 
   const handleAddOrUploadBook = async (file: File) => {
     const cleanTitle = file.name.replace(/\.pdf$/i, "");
@@ -191,10 +214,13 @@ export default function App() {
     setActiveBook(newBook);
   };
   return (
-    <div className="min-h-screen bg-[#0e0f12] text-[#d4d4d8] flex flex-col font-mono selection:bg-emerald-950 selection:text-emerald-300">
+    <div
+      className="app-shell min-h-screen flex flex-col font-sans"
+      data-theme={theme}
+    >
       {/* Top Navbar Section */}
       <header
-        className={`sticky top-0 z-30 bg-[#15171c] border-b border-[#2a2d35] px-4 py-3 ${
+        className={`app-header sticky top-0 z-30 px-4 py-3 ${
           navbarHidden ? "hidden" : ""
         }`}
       >
@@ -213,59 +239,32 @@ export default function App() {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="bg-[#242731] hover:bg-[#2e323e] active:scale-95 border border-[#3c4150] text-zinc-100 text-xs font-semibold px-3.5 py-2 rounded-md transition flex items-center gap-2 cursor-pointer shrink-0 shadow-sm"
+              className="app-btn active:scale-95 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-2 cursor-pointer shrink-0"
             >
               <span>📁</span> Choose PDF
             </button>
-            <span className="text-xs text-zinc-300 font-medium truncate block max-w-[180px] sm:max-w-xs md:max-w-sm">
+            <span className="text-xs font-medium truncate block max-w-[180px] sm:max-w-xs md:max-w-sm">
               {activeBook?.title || "No file selected"}
             </span>
           </div>
 
-          {/* Center: Pagination controls
-          {activeBook && (
-            <div className="flex items-center gap-2 bg-[#1b1e24] border border-[#2e323e] px-2.5 py-1.5 rounded-md">
-              <button
-                disabled={currentPage === 0}
-                onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
-              >
-                ◀ Prev
-              </button>
-              <span className="text-xs text-emerald-400 font-bold px-1 tabular-nums">
-                Page {currentPage + 1} / {activeBook.totalPages}
-              </span>
-              <button
-                disabled={currentPage >= activeBook.totalPages - 1}
-                onClick={() =>
-                  jumpTo(
-                    Math.min(activeBook.totalPages - 1, currentPage + 1),
-                    0,
-                  )
-                }
-                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
-              >
-                Next ▶
-              </button>
-            </div>
-          )} */}
           {/* Center: Pagination & Go-To Controls */}
           {activeBook && (
             <form
               onSubmit={handlePageJump}
-              className="flex items-center gap-1.5 bg-[#1b1e24] border border-[#2e323e] px-2 py-1 rounded-md"
+              className="app-control flex items-center gap-1.5 px-2 py-1 rounded-md"
             >
               <button
                 type="button"
                 disabled={currentPage === 0}
                 onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
+                className="px-2 py-0.5 text-xs app-muted hover:opacity-80 disabled:opacity-20 cursor-pointer"
               >
                 ◀ Prev
               </button>
 
               <div className="flex items-center gap-1 px-1">
-                <span className="text-zinc-500 text-xs select-none">Pg</span>
+                <span className="app-muted text-xs select-none">Pg</span>
                 <input
                   type="number"
                   min={1}
@@ -273,16 +272,16 @@ export default function App() {
                   value={gotoInput}
                   onChange={(e) => setGotoInput(e.target.value)}
                   onBlur={handlePageJump}
-                  className="w-12 bg-[#121316] border border-[#353945] rounded text-center text-xs text-emerald-400 font-bold focus:outline-none focus:border-emerald-500 py-0.5 font-mono"
+                  className="app-input w-12 rounded text-center text-xs font-bold py-0.5 font-mono"
                 />
-                <span className="text-xs text-zinc-500 font-normal">
+                <span className="text-xs app-muted font-normal">
                   / {activeBook.totalPages}
                 </span>
               </div>
 
               <button
                 type="submit"
-                className="bg-[#242731] hover:bg-[#2e323e] border border-[#3c4150] text-zinc-200 text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer transition"
+                className="app-btn text-[11px] font-semibold px-2 py-0.5 cursor-pointer"
               >
                 Go
               </button>
@@ -296,7 +295,7 @@ export default function App() {
                     0,
                   )
                 }
-                className="px-2 py-0.5 text-xs text-zinc-300 hover:text-white disabled:opacity-20 cursor-pointer"
+                className="px-2 py-0.5 text-xs app-muted hover:opacity-80 disabled:opacity-20 cursor-pointer"
               >
                 Next ▶
               </button>
@@ -309,15 +308,15 @@ export default function App() {
               <button
                 onClick={handleInstallVoice}
                 disabled={downloadPct !== null}
-                className="bg-amber-500/10 text-amber-400 border border-amber-500/30 text-xs px-3 py-1.5 rounded-md hover:bg-amber-500/20 transition cursor-pointer"
+                className="app-btn text-xs px-3 py-1.5 cursor-pointer"
               >
                 {downloadPct !== null
                   ? `Loading (${downloadPct}%)`
                   : "Load Voice (63MB)"}
               </button>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[11px] bg-[#10261b] text-emerald-400 px-2.5 py-1 rounded-md border border-[#1b4e33]">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="app-chip inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
                 hfc_male
               </span>
             )}
@@ -325,19 +324,15 @@ export default function App() {
             <button
               onClick={togglePlay}
               disabled={!activeBook || !voiceReady}
-              className={`px-4 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm ${
-                isPlaying
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
-                  : "bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-25"
-              }`}
+              className={`px-4 py-1.5 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                isPlaying ? "app-pause" : "app-play"
+              } disabled:opacity-25`}
             >
               {isPlaying ? "⏸ Pause" : "▶ Play"}
             </button>
           </div>
-          <div className="flex items-center gap-2 bg-[#1b1e24] border border-[#2e323e] px-2.5 py-1.5 rounded-md">
-            <span className="text-[11px] text-zinc-400 font-mono select-none">
-              Speed
-            </span>
+          <div className="app-control flex items-center gap-2 px-2.5 py-1.5 rounded-md">
+            <span className="text-[11px] app-muted select-none">Speed</span>
             <input
               type="range"
               min="0.5"
@@ -345,9 +340,9 @@ export default function App() {
               step="0.1"
               value={speed}
               onChange={(e) => setSpeed(parseFloat(e.target.value))}
-              className="w-16 md:w-20 accent-emerald-500 cursor-pointer bg-zinc-700 h-1 rounded"
+              className="w-16 md:w-20 accent-current cursor-pointer h-1 rounded"
             />
-            <span className="text-xs text-emerald-400 font-mono font-bold w-9 text-right tabular-nums select-none">
+            <span className="text-xs app-accent font-mono font-bold w-9 text-right tabular-nums select-none">
               {speed.toFixed(1)}×
             </span>
           </div>
@@ -355,11 +350,19 @@ export default function App() {
             <button
               type="button"
               onClick={() => setNavbarHidden(true)}
-              className="bg-[#1b1e24] hover:bg-[#2e323e] border border-[#2e323e] text-zinc-300 text-[11px] font-semibold px-2.5 py-1.5 rounded-md cursor-pointer shrink-0"
+              className="app-btn text-[11px] font-semibold px-2.5 py-1.5 cursor-pointer shrink-0"
             >
               Hide nav
             </button>
           )}
+          <AppearanceMenu
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            theme={theme}
+            fontId={fontId}
+            onThemeChange={setTheme}
+            onFontChange={setFontId}
+          />
         </div>
       </header>
 
@@ -370,17 +373,15 @@ export default function App() {
             onClick={togglePlay}
             disabled={!activeBook || !voiceReady}
             className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${
-              isPlaying
-                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                : "bg-emerald-600 text-white disabled:opacity-25"
-            }`}
+              isPlaying ? "app-pause" : "app-play"
+            } disabled:opacity-25`}
           >
             {isPlaying ? "⏸" : "▶"}
           </button>
           <button
             type="button"
             onClick={() => setNavbarHidden(false)}
-            className="bg-[#15171c] text-zinc-200 border border-[#3c4150] text-[11px] font-semibold px-2.5 py-1.5 rounded-md shadow-lg cursor-pointer"
+            className="app-btn text-[11px] font-semibold px-2.5 py-1.5 shadow-lg cursor-pointer"
           >
             Show nav
           </button>
@@ -390,16 +391,16 @@ export default function App() {
       {/* Two-Column App Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* PDF Reading Area with Explicit Border Outline */}
-        <main className="lg:col-span-8 bg-[#13151a] border border-[#2b2e38] rounded-lg flex flex-col shadow-xl overflow-hidden">
+        <main className="app-panel lg:col-span-8 rounded-lg flex flex-col shadow-xl overflow-hidden">
           {/* Header inside the text reader container */}
-          <div className="bg-[#181a20] border-b border-[#2b2e38] px-5 py-3 flex items-center justify-between text-xs text-zinc-400">
+          <div className="app-panel-header px-5 py-3 flex items-center justify-between text-xs">
             <span>
               {activeBook
                 ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                 : "Document View"}
             </span>
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-[#1b1e24] border border-[#2e323e] px-1.5 py-0.5 rounded-md">
+              <div className="app-control flex items-center gap-1 px-1.5 py-0.5 rounded-md">
                 <button
                   type="button"
                   aria-label="Decrease font size"
@@ -407,11 +408,11 @@ export default function App() {
                   onClick={() =>
                     setFontSize((size) => Math.max(MIN_FONT_SIZE, size - 1))
                   }
-                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-[#2e323e] rounded disabled:opacity-25 cursor-pointer"
+                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold rounded disabled:opacity-25 cursor-pointer"
                 >
                   A−
                 </button>
-                <span className="text-emerald-400 font-mono font-bold w-8 text-center tabular-nums">
+                <span className="app-accent font-mono font-bold w-8 text-center tabular-nums">
                   {fontSize}
                 </span>
                 <button
@@ -421,7 +422,7 @@ export default function App() {
                   onClick={() =>
                     setFontSize((size) => Math.min(MAX_FONT_SIZE, size + 1))
                   }
-                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-[#2e323e] rounded disabled:opacity-25 cursor-pointer"
+                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold rounded disabled:opacity-25 cursor-pointer"
                 >
                   A+
                 </button>
@@ -433,8 +434,9 @@ export default function App() {
           <div className="px-2 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto max-h-[75vh]">
             {activeBook ? (
               <div
-                className="font-sans text-left max-w-3xl"
+                className="text-left max-w-3xl"
                 style={{
+                  fontFamily: readerFont.cssFamily,
                   fontSize: `${fontSize}px`,
                   lineHeight: 1.7,
                 }}
@@ -450,21 +452,20 @@ export default function App() {
                     !isQueued &&
                     sentenceHits.some((s) => processedLines.includes(s));
                   const isFirstCurrent = idx === firstCurrentDisplayIdx;
+                  const lineState = isCurrent
+                    ? "is-current"
+                    : isQueued
+                      ? "is-queued"
+                      : isProcessed
+                        ? "is-processed"
+                        : "is-pending";
 
                   return (
                     <div
                       key={idx}
                       ref={isFirstCurrent ? activeLineRef : null}
                       onClick={() => handleDisplayLineClick(idx)}
-                      className={`px-1 sm:px-2 py-0.5 rounded-sm cursor-pointer transition ${
-                        isCurrent
-                          ? "bg-[#10261b] text-emerald-200"
-                          : isQueued
-                            ? "bg-[#101826] text-sky-200"
-                            : isProcessed
-                              ? "text-zinc-300"
-                              : "text-zinc-500 hover:bg-[#181a22]"
-                      }`}
+                      className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
                     >
                       {line.length > 0 ? (
                         line
@@ -476,7 +477,7 @@ export default function App() {
                 })}
               </div>
             ) : (
-              <div className="h-64 flex flex-col items-center justify-center text-zinc-500 text-sm space-y-2">
+              <div className="h-64 flex flex-col items-center justify-center app-muted text-sm space-y-2">
                 <span className="text-2xl">📄</span>
                 <p>No active document. Choose a PDF or select a saved book.</p>
               </div>

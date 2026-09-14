@@ -112,22 +112,110 @@ code {
 
 /* src/index.css */
 @import "tailwindcss";
-:root {
-  color-scheme: dark;
-}
-/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #0e0f12;
+  --app-text: #d4d4d8;
+  --header-bg: #15171c;
+  --header-border: #2a2d35;
+  --panel-bg: #13151a;
+  --panel-header: #181a20;
+  --panel-border: #2b2e38;
+  --control-bg: #1b1e24;
+  --control-border: #2e323e;
+  --btn-bg: #242731;
+  --btn-border: #3c4150;
+  --btn-text: #f4f4f5;
+  --btn-hover: #2e323e;
+  --muted: #a1a1aa;
+  --accent: #34d399;
+  --accent-soft: #10261b;
+  --input-bg: #121316;
+  --row-selected-bg: #12241b;
+  --row-selected-text: #6ee7b7;
+  --progress-track: #20232c;
+  --progress-fill: #10b981;
+  --play-bg: #059669;
+  --play-text: #ffffff;
+  --pause-bg: rgba(245, 158, 11, 0.2);
+  --pause-text: #fcd34d;
+  --pause-border: rgba(245, 158, 11, 0.4);
+  --line-current-bg: #10261b;
+  --line-current-text: #a7f3d0;
+  --line-queued-bg: #101826;
+  --line-queued-text: #bae6fd;
+  --line-processed-bg: transparent;
+  --line-processed-text: #d4d4d8;
+  --line-pending-text: #71717a;
+  --line-pending-hover: #181a22;
+  --selection-bg: #022c22;
+  --selection-text: #6ee7b7;
+  --voice-bg: #10261b;
+  --voice-text: #34d399;
+  --voice-border: #1b4e33;
+  --menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+[data-theme="ereader"] {
+  color-scheme: light;
+  --app-bg: #f4f1ea;
+  --app-text: #2c302e;
+  --header-bg: #f7f5f0;
+  --header-border: #e2ded6;
+  --panel-bg: #f7f5f0;
+  --panel-header: #f0ece4;
+  --panel-border: #e2ded6;
+  --control-bg: #efebe3;
+  --control-border: #e2ded6;
+  --btn-bg: #efebe3;
+  --btn-border: #d7d2c8;
+  --btn-text: #2c302e;
+  --btn-hover: #e7e2d8;
+  --muted: #5c5f5b;
+  --accent: #3d4a3f;
+  --accent-soft: #ece6d8;
+  --input-bg: #fbfaf6;
+  --row-selected-bg: #ece6d8;
+  --row-selected-text: #2c302e;
+  --progress-track: #e2ded6;
+  --progress-fill: #6b746c;
+  --play-bg: #2c302e;
+  --play-text: #f7f5f0;
+  --pause-bg: #ece6d8;
+  --pause-text: #2c302e;
+  --pause-border: #d7d2c8;
+  --line-current-bg: rgba(245, 218, 129, 0.45);
+  --line-current-text: #1a1a1a;
+  --line-queued-bg: rgba(245, 218, 129, 0.22);
+  --line-queued-text: #1a1a1a;
+  --line-processed-bg: rgba(168, 216, 234, 0.35);
+  --line-processed-text: #2c3e50;
+  --line-pending-text: #222222;
+  --line-pending-hover: #efebe3;
+  --selection-bg: #f5da81;
+  --selection-text: #1a1a1a;
+  --voice-bg: #efebe3;
+  --voice-text: #3d4a3f;
+  --voice-border: #d7d2c8;
+  --menu-shadow: 0 12px 28px rgba(80, 70, 50, 0.12);
+}
+
 body {
   margin: 0;
   padding: 0;
-  background-color: #0f1012;
-  color: #d4d4d8;
+  background-color: var(--app-bg);
+  color: var(--app-text);
   font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+    ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 #root {
@@ -135,3 +223,201 @@ body {
   min-height: 100vh;
   text-align: left;
 }
+
+.app-shell {
+  background: var(--app-bg);
+  color: var(--app-text);
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.app-shell ::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+.app-header {
+  background: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
+}
+
+.app-panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+}
+
+.app-panel-header {
+  background: var(--panel-header);
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--muted);
+}
+
+.app-control {
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+}
+
+.app-btn {
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  color: var(--btn-text);
+  border-radius: 0.375rem;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.app-btn:hover:not(:disabled) {
+  background: var(--btn-hover);
+}
+
+.app-btn:disabled {
+  opacity: 0.25;
+}
+
+.app-play {
+  background: var(--play-bg);
+  color: var(--play-text);
+  border: 1px solid transparent;
+}
+
+.app-play:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.app-pause {
+  background: var(--pause-bg);
+  color: var(--pause-text);
+  border: 1px solid var(--pause-border);
+}
+
+.app-muted {
+  color: var(--muted);
+}
+
+.app-accent {
+  color: var(--accent);
+}
+
+.app-input {
+  background: var(--input-bg);
+  border: 1px solid var(--control-border);
+  color: var(--accent);
+}
+
+.app-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.app-chip {
+  background: var(--voice-bg);
+  color: var(--voice-text);
+  border: 1px solid var(--voice-border);
+}
+
+.app-menu {
+  background: var(--header-bg);
+  border: 1px solid var(--header-border);
+  border-radius: 0.5rem;
+  box-shadow: var(--menu-shadow);
+}
+
+.app-menu-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+.app-choice {
+  background: var(--control-bg);
+  border: 1px solid var(--control-border);
+  color: var(--app-text);
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.app-choice.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.reader-line {
+  border-radius: 0.25rem;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.reader-line.is-current {
+  background: var(--line-current-bg);
+  color: var(--line-current-text);
+}
+
+.reader-line.is-queued {
+  background: var(--line-queued-bg);
+  color: var(--line-queued-text);
+}
+
+.reader-line.is-processed {
+  background: var(--line-processed-bg);
+  color: var(--line-processed-text);
+}
+
+.reader-line.is-pending {
+  color: var(--line-pending-text);
+}
+
+.reader-line.is-pending:hover {
+  background: var(--line-pending-hover);
+}
+
+.shelf-count {
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  color: var(--muted);
+}
+
+.shelf-row {
+  color: var(--muted);
+}
+
+.shelf-row:hover {
+  background: var(--line-pending-hover);
+}
+
+.shelf-row.is-selected {
+  background: var(--row-selected-bg);
+  color: var(--row-selected-text);
+}
+
+.shelf-title {
+  color: var(--app-text);
+}
+
+.shelf-progress {
+  background: var(--progress-track);
+  border: 1px solid var(--panel-border);
+}
+
+.shelf-progress-fill {
+  background: var(--progress-fill);
+}
+
+.shelf-add {
+  color: var(--accent);
+}
+
+.shelf-add:hover {
+  border-color: var(--accent);
+}
+
