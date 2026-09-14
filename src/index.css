@@ -191,9 +191,9 @@ code {
   --pause-border: #d7d2c8;
   --line-current-bg: rgba(245, 218, 129, 0.45);
   --line-current-text: #1a1a1a;
-  --line-queued-bg: rgba(245, 218, 129, 0.22);
+  --line-queued-bg: rgba(246, 231, 183, 0.134);
   --line-queued-text: #1a1a1a;
-  --line-processed-bg: rgba(168, 216, 234, 0.35);
+  --line-processed-bg: rgba(183, 225, 240, 0.14);
   --line-processed-text: #2c3e50;
   --line-pending-text: #222222;
   --line-pending-hover: #efebe3;
