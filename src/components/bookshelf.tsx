@@ -79,12 +79,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
           </button>
           
         </div>
-        <button
-            onClick={() => setIsFindModalOpen(true)}
-            className="app-btn active:scale-95 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-2 cursor-pointer shrink-0"
-          >
-            <span>🔍</span> Find Online
-          </button>
+
       </div>
 
       <div className="p-4 space-y-3">
@@ -209,6 +204,17 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </button>
           </div>
         )}
+              {/* Shelf Bottom Footer */}
+<div className="pt-3 mt-auto">
+  <button
+    type="button"
+    onClick={() => setIsFindModalOpen(true)}
+    className="app-btn w-full text-xs font-semibold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.99] border border-inherit"
+  >
+    <span>🔍</span>
+    <span>Find Book Online</span>
+  </button>
+</div>
       </div>
     </div>
     <FindBookModal
