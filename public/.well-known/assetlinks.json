@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.vercel.tts_tool_offline.twa",
+        "sha256_cert_fingerprints": ["20:A9:91:FB:A0:77:8C:3D:8A:F5:4C:11:06:24:C0:61:08:23:19:D8:65:D4:8D:0E:63:ED:1A:72:81:EF:1E:95"]
+      }
+    }]
