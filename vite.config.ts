@@ -78,12 +78,12 @@ export default defineConfig({
           },
         ],
         screenshots: [
-          {src: './mobile-landscape-view(1600x641).jpg', sizes: '1600x641', type: 'image/jpg', form_factor: 'wide', label: 'Mobile Landscape View'},
-          {src: './mobile-portrait-view(726x1456).jpg', sizes: '726x1456', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile Portrait View'},
-          {src: './mobile-portrait-view(726x1467).jpg', sizes: '726x1467', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
-          {src: './dark-mode-2(726x1492).jpg', sizes: '726x1492', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile View'},
-          {src: './dark-mode(726x1454).jpg', sizes: '726x1454', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile View dark'},
-          {src: './DesktopView(1600x864).jpg', sizes: '1600x864', type: 'image/jpg', form_factor: 'wide', label: 'Desktop View'},
+          {src: './mobile-landscape-view(1600x641).jpeg', sizes: '1600x641', type: 'image/jpg', form_factor: 'wide', label: 'Mobile Landscape View'},
+          {src: './mobile-portrait-view(726x1456).jpeg', sizes: '726x1456', type: 'image/jpeg', form_factor: 'narrow', label: 'Mobile Portrait View'},
+          {src: './mobile-portrait-view(726x1467).jpeg', sizes: '726x1467', type: 'image/jpeg', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
+          {src: './dark-mode-2(726x1492).jpeg', sizes: '726x1492', type: 'image/jpeg', form_factor: 'narrow', label: 'Mobile View'},
+          {src: './dark-mode(726x1454).jpeg', sizes: '726x1454', type: 'image/jpeg', form_factor: 'narrow', label: 'Mobile View dark'},
+          {src: './DesktopView(1600x864).jpeg', sizes: '1600x864', type: 'image/jpeg', form_factor: 'wide', label: 'Desktop View'},
         ]
         
       },
