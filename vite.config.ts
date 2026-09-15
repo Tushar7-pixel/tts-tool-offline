@@ -82,7 +82,7 @@ export default defineConfig({
           {src: './mobile-portrait-view(726x1467).png', sizes: '726x1467', type: 'image/png', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
           {src: './dark-mode-2(726x1492).png', sizes: '726x1492', type: 'image/png', form_factor: 'narrow', label: 'Mobile View'},
           {src: './dark-mode(726x1454).png', sizes: '726x1454', type: 'image/png', form_factor: 'narrow', label: 'Mobile View dark'},
-          {src: './DesktopView(1600x864).png', sizes: '1630x854', type: 'image/png', form_factor: 'wide', label: 'Desktop View'},
+          {src: './DesktopView(1600x864).png', sizes: '1600x864', type: 'image/png', form_factor: 'wide', label: 'Desktop View'},
         ]
         
       },
