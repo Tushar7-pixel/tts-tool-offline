@@ -1,6 +1,7 @@
 // src/components/BookShelf.tsx
 import React, { useState, useMemo, useRef } from "react";
 import type { BookDoc } from "../utils/db";
+import { FindBookModal } from "./FindBookModal";
 
 interface BookShelfProps {
   books: BookDoc[];
@@ -10,6 +11,7 @@ interface BookShelfProps {
   onDeleteBook: (id: string) => void;
   onAddBook: (file: File) => void;
   pageSize?: number;
+  theme: "dark" | "ereader";
 }
 
 export const BookShelf: React.FC<BookShelfProps> = ({
@@ -20,11 +22,12 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   onDeleteBook,
   onAddBook,
   pageSize = 5,
+  theme,
 }) => {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(""); 
   const [shelfPage, setShelfPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+  const [isFindModalOpen, setIsFindModalOpen] = useState(false);
   const filteredBooks = useMemo(() => {
     return books.filter((b) =>
       b.title.toLowerCase().includes(searchQuery.toLowerCase().trim()),
@@ -48,6 +51,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   };
 
   return (
+    <>
     <div className="app-panel rounded-lg overflow-hidden flex flex-col">
       <div className="app-panel-header px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -73,7 +77,14 @@ export const BookShelf: React.FC<BookShelfProps> = ({
           >
             <span>+</span> Add Book
           </button>
+          
         </div>
+        <button
+            onClick={() => setIsFindModalOpen(true)}
+            className="app-btn active:scale-95 text-xs font-semibold px-3.5 py-2 transition flex items-center gap-2 cursor-pointer shrink-0"
+          >
+            <span>🔍</span> Find Online
+          </button>
       </div>
 
       <div className="p-4 space-y-3">
@@ -200,5 +211,11 @@ export const BookShelf: React.FC<BookShelfProps> = ({
         )}
       </div>
     </div>
+    <FindBookModal
+        isOpen={isFindModalOpen}
+        onClose={() => setIsFindModalOpen(false)}
+        theme={theme}
+      />
+    </>
   );
 };

@@ -184,11 +184,11 @@ code {
   --row-selected-text: #2c302e;
   --progress-track: #e2ded6;
   --progress-fill: #6b746c;
-  --play-bg: #2c302e;
-  --play-text: #f7f5f0;
+  --play-bg: rgba(245, 218, 129, 0.853)  ;
+  --play-text: #635d5d;
   --pause-bg: #ece6d8;
   --pause-text: #2c302e;
-  --pause-border: #d7d2c8;
+  --pause-border: #504328;
   --line-current-bg: rgba(245, 218, 129, 0.45);
   --line-current-text: #1a1a1a;
   --line-queued-bg: rgba(246, 231, 183, 0.134);

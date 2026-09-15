@@ -29,7 +29,6 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
-
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
 
@@ -247,7 +246,7 @@ export default function App() {
               {activeBook?.title || "No file selected"}
             </span>
           </div>
-
+          
           {/* Center: Pagination & Go-To Controls */}
           {activeBook && (
             <form
@@ -498,9 +497,11 @@ export default function App() {
             onDeleteBook={handleDeleteBook}
             onAddBook={handleAddOrUploadBook}
             pageSize={5}
+            theme={theme}
           />
         </aside>
       </div>
+
     </div>
   );
 }

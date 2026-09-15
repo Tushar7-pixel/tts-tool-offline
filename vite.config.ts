@@ -36,11 +36,26 @@ export default defineConfig({
       manifest: {
         name: 'PIPER BOOK READER',        // Full application name
         short_name: 'PIPER READER',      // Short name displayed beneath home screen icon
-        description: 'Offline-first neural voice PDF reader',
+        description: 'Private, offline PDF reader with realistic multi-accent neural voices (male & female). Turn any document into an audiobook on-device.',
+        categories: ['books', 'productivity', 'utilities'],
         theme_color: '#0e0f12',
         background_color: '#0e0f12',
         display: 'standalone',
+        orientation: 'portrait',
         start_url: '/',
+        share_target: {
+          action: '/share-target',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            files: [
+              {
+                name: 'pdf_file',
+                accept: ['application/pdf', '.pdf'],
+              },
+            ],
+          },
+        },
         icons: [
           {
             src: '/pwa-192x192.png',
@@ -61,6 +76,15 @@ export default defineConfig({
             purpose: 'maskable',
           },
         ],
+        screenshots: [
+          {src: './mobile-landscape-view(1600x641).png', sizes: '1600x641', type: 'image/png', form_factor: 'wide', label: 'Mobile Landscape View'},
+          {src: './mobile-portrait-view(726x1456).png', sizes: '726x1456', type: 'image/png', form_factor: 'narrow', label: 'Mobile Portrait View'},
+          {src: './mobile-portrait-view(726x1467).png', sizes: '726x1467', type: 'image/png', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
+          {src: './dark-mode-2(726x1492).png', sizes: '726x1492', type: 'image/png', form_factor: 'narrow', label: 'Mobile View'},
+          {src: './dark-mode(726x1454).png', sizes: '726x1454', type: 'image/png', form_factor: 'narrow', label: 'Mobile View dark'},
+          {src: './DesktopView(1600x864).png', sizes: '1630x854', type: 'image/png', form_factor: 'wide', label: 'Desktop View'},
+        ]
+        
       },
     }),
   ],
