@@ -12,7 +12,7 @@ interface MediaSessionOptions {
   
   export function setupMediaSession({
     title,
-    artist = 'EchoRead Reader',
+    artist = 'Piper Book Reader',
     album = 'Audiobook',
     onPlay,
     onPause,
