@@ -16,7 +16,14 @@ import {
   type ReaderFontId,
   type ReaderTheme,
 } from "./utils/readerAppearance";
-
+import {
+  startBackgroundAudioSession,
+  pauseBackgroundAudioSession,
+} from './utils/backgroundAudio';
+import {
+  setupMediaSession,
+  updateMediaSessionState,
+} from './utils/mediaSession';
 export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
@@ -212,6 +219,42 @@ export default function App() {
     await loadBooks();
     setActiveBook(newBook);
   };
+
+  useEffect(() => {
+    if (!activeBook) return;
+  
+    setupMediaSession({
+      title: activeBook.title,
+      artist: 'EchoRead Piper TTS',
+      album: `Page ${currentPage + 1} of ${activeBook.totalPages}`,
+      onPlay: () => {
+        if (!isPlaying) togglePlay();
+      },
+      onPause: () => {
+        if (isPlaying) togglePlay();
+      },
+      onNext: () => {
+        if (currentPage < activeBook.totalPages - 1) {
+          jumpTo(currentPage + 1, 0);
+        }
+      },
+      onPrev: () => {
+        if (currentPage > 0) {
+          jumpTo(currentPage - 1, 0);
+        }
+      },
+    });
+  }, [activeBook, currentPage, isPlaying, togglePlay, jumpTo]);
+  
+  useEffect(() => {
+    updateMediaSessionState(isPlaying);
+  
+    if (isPlaying) {
+      startBackgroundAudioSession();
+    } else {
+      pauseBackgroundAudioSession();
+    }
+  }, [isPlaying]);
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
