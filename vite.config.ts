@@ -43,6 +43,7 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
+        id: '/?source=pwa',
         share_target: {
           action: '/share-target',
           method: 'POST',
@@ -77,12 +78,12 @@ export default defineConfig({
           },
         ],
         screenshots: [
-          {src: './mobile-landscape-view(1600x641).png', sizes: '1600x641', type: 'image/png', form_factor: 'wide', label: 'Mobile Landscape View'},
-          {src: './mobile-portrait-view(726x1456).png', sizes: '726x1456', type: 'image/png', form_factor: 'narrow', label: 'Mobile Portrait View'},
-          {src: './mobile-portrait-view(726x1467).png', sizes: '726x1467', type: 'image/png', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
-          {src: './dark-mode-2(726x1492).png', sizes: '726x1492', type: 'image/png', form_factor: 'narrow', label: 'Mobile View'},
-          {src: './dark-mode(726x1454).png', sizes: '726x1454', type: 'image/png', form_factor: 'narrow', label: 'Mobile View dark'},
-          {src: './DesktopView(1600x864).png', sizes: '1600x864', type: 'image/png', form_factor: 'wide', label: 'Desktop View'},
+          {src: './mobile-landscape-view(1600x641).jpg', sizes: '1600x641', type: 'image/jpg', form_factor: 'wide', label: 'Mobile Landscape View'},
+          {src: './mobile-portrait-view(726x1456).jpg', sizes: '726x1456', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile Portrait View'},
+          {src: './mobile-portrait-view(726x1467).jpg', sizes: '726x1467', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile Portrait View Dark'},
+          {src: './dark-mode-2(726x1492).jpg', sizes: '726x1492', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile View'},
+          {src: './dark-mode(726x1454).jpg', sizes: '726x1454', type: 'image/jpg', form_factor: 'narrow', label: 'Mobile View dark'},
+          {src: './DesktopView(1600x864).jpg', sizes: '1600x864', type: 'image/jpg', form_factor: 'wide', label: 'Desktop View'},
         ]
         
       },
