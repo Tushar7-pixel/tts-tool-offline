@@ -63,8 +63,8 @@ export default function App() {
   const [activeVoiceSlot, setActiveVoiceSlot] = useState<'primary' | 'secondary'>('primary');
 
   // Derive active voice metadata
-  const currentActiveVoiceId = activeVoiceSlot === 'primary' ? primaryVoiceId : (secondaryVoiceId || primaryVoiceId);
-  const currentVoiceInfo = AVAILABLE_VOICES.find(v => v.id === currentActiveVoiceId);
+  // const currentActiveVoiceId = activeVoiceSlot === 'primary' ? primaryVoiceId : (secondaryVoiceId || primaryVoiceId);
+  // const currentVoiceInfo = AVAILABLE_VOICES.find(v => v.id === currentActiveVoiceId);
 
   // Handle downloading new voice model
   const handleDownloadVoiceId = async (id: string) => {
