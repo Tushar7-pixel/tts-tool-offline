@@ -34,7 +34,7 @@ export async function synthesize(text: string): Promise<Blob> {
     });
 }
 
-export async function playRawAudioBuffer(audioData: Float32Array | AudioBuffer) {
+export async function playRawAudioBuffer() {
     const ctx = getSharedAudioContext();
     
     // AudioContext MUST be running

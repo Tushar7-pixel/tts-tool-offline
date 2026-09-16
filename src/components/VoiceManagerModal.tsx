@@ -64,7 +64,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
       sampleAudioRef.current.pause();
     }
 
-    const audio = new Audio(voice.sampleAudioUrl);
+    const audio = new Audio(voice.sampleRemoteUrl);
     sampleAudioRef.current = audio;
     setPlayingSampleId(voice.id);
 

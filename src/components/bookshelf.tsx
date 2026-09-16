@@ -14,13 +14,6 @@ interface BookShelfProps {
   theme: "dark" | "ereader";
 }
 
-// Cleans filenames like "_OceanofPDF.com_Flawless_-_Elsie_Silver" -> "Flawless - Elsie Silver"
-function cleanBookTitle(rawTitle: string): string {
-  return rawTitle
-    .replace(/^[_\s]*oceanofpdf(\.com)?[_\s-]*/i, '')
-    .replace(/[_-]+/g, ' ')
-    .trim() || rawTitle;
-}
 
 export const BookShelf: React.FC<BookShelfProps> = ({
   books,
