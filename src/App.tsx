@@ -347,7 +347,33 @@ export default function App() {
       },
     });
   }, [activeBook, currentPage, currentActiveVoiceId]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const readerContainerRef = useRef<HTMLElement | null>(null);
 
+  const toggleFullscreen = async () => {
+    const next = !isFullscreen;
+    setIsFullscreen(next);
+  
+    // Native Fullscreen API for PC / Mac / Android
+    if (document.fullscreenEnabled) {
+      try {
+        if (next && !document.fullscreenElement) {
+          await readerContainerRef.current?.requestFullscreen?.();
+        } else if (!next && document.fullscreenElement) {
+          await document.exitFullscreen?.();
+        }
+      } catch {
+        // Graceful fallback to CSS fullscreen (e.g. iPad Safari)
+      }
+    }
+  };
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
@@ -600,14 +626,24 @@ export default function App() {
 
       {/* Two-Column App Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <main className="app-panel lg:col-span-8 rounded-lg flex flex-col shadow-xl overflow-hidden">
-          <div className="app-panel-header px-5 py-3 flex items-center justify-between text-xs">
-            <span>
+      {/* PDF Reading Area */}
+      <main
+          ref={readerContainerRef}
+          className={`app-panel flex flex-col shadow-xl overflow-hidden transition-all duration-150 ${
+            isFullscreen
+              ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
+              : "lg:col-span-8 rounded-lg"
+          }`}
+        >
+          <div className="app-panel-header px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between text-xs shrink-0">
+            <span className="font-semibold">
               {activeBook
                 ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                 : "Document View"}
             </span>
+
             <div className="flex items-center gap-2">
+              {/* Font Size Controls */}
               <div className="app-control flex items-center gap-1 px-1.5 py-0.5 rounded-md">
                 <button
                   type="button"
@@ -620,7 +656,7 @@ export default function App() {
                 >
                   A−
                 </button>
-                <span className="app-accent font-mono font-bold w-8 text-center tabular-nums">
+                <span className="app-accent font-mono font-bold w-8 text-center tabular-nums select-none">
                   {fontSize}
                 </span>
                 <button
@@ -635,14 +671,39 @@ export default function App() {
                   A+
                 </button>
               </div>
-              <span>{displayedLines.length} lines</span>
+
+              <span className="hidden sm:inline app-muted">
+                {displayedLines.length} lines
+              </span>
+
+              {/* Fullscreen Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"}
+                className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
+                  isFullscreen
+                    ? "bg-amber-400 text-black font-bold shadow-xs"
+                    : "app-btn border border-inherit"
+                }`}
+              >
+                <span>{isFullscreen ? "🗗" : "⛶"}</span>
+                <span className="hidden sm:inline text-[11px]">
+                  {isFullscreen ? "Exit" : "Full"}
+                </span>
+              </button>
             </div>
           </div>
 
-          <div className="px-2 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto max-h-[75vh]">
+          {/* Reading text body */}
+          <div
+            className={`px-3 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto ${
+              isFullscreen ? "h-full max-h-none" : "max-h-[75vh]"
+            }`}
+          >
             {activeBook ? (
               <div
-                className="text-left max-w-3xl"
+                className="text-left max-w-3xl mx-auto"
                 style={{
                   fontFamily: readerFont.cssFamily,
                   fontSize: `${fontSize}px`,
