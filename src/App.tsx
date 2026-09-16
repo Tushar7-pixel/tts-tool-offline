@@ -27,6 +27,7 @@ import {
 } from "./utils/mediaSession";
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
+
 export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
@@ -46,33 +47,66 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeLineRef = useRef<HTMLDivElement | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('echoread_installed_voices');
-    return saved ? JSON.parse(saved) : ['en_US-hfc_male-medium'];
+    const saved = localStorage.getItem("echoread_installed_voices");
+    return saved ? JSON.parse(saved) : ["en_US-hfc_male-medium"];
   });
 
   const [primaryVoiceId, setPrimaryVoiceId] = useState<string>(() => {
-    return localStorage.getItem('echoread_primary_voice') || 'en_US-hfc_male-medium';
+    return (
+      localStorage.getItem("echoread_primary_voice") ||
+      "en_US-hfc_male-medium"
+    );
   });
 
   const [secondaryVoiceId, setSecondaryVoiceId] = useState<string | null>(() => {
-    return localStorage.getItem('echoread_secondary_voice') || 'en_US-hfc_female-medium';
+    return (
+      localStorage.getItem("echoread_secondary_voice") ||
+      "en_US-hfc_female-medium"
+    );
   });
 
-  // Which slot is actively speaking ('primary' | 'secondary')
-  const [activeVoiceSlot, setActiveVoiceSlot] = useState<'primary' | 'secondary'>('primary');
+  // Slot currently active ('primary' | 'secondary')
+  const [activeVoiceSlot, setActiveVoiceSlot] = useState<"primary" | "secondary">(
+    "primary",
+  );
 
-  // Derive active voice metadata
-  // const currentActiveVoiceId = activeVoiceSlot === 'primary' ? primaryVoiceId : (secondaryVoiceId || primaryVoiceId);
-  // const currentVoiceInfo = AVAILABLE_VOICES.find(v => v.id === currentActiveVoiceId);
+  // Active voice metadata
+  const currentActiveVoiceId =
+    activeVoiceSlot === "primary"
+      ? primaryVoiceId
+      : secondaryVoiceId || primaryVoiceId;
 
-  // Handle downloading new voice model
+  const currentVoiceInfo = AVAILABLE_VOICES.find(
+    (v) => v.id === currentActiveVoiceId,
+  );
+  const primaryVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === primaryVoiceId);
+  const secondaryVoiceInfo = AVAILABLE_VOICES.find(
+    (v) => v.id === secondaryVoiceId,
+  );
+
+  const primaryLabel = primaryVoiceInfo
+    ? `V1: ${primaryVoiceInfo.name.split(" ")[0]} (${
+        primaryVoiceInfo.gender === "male" ? "M" : "F"
+      })`
+    : "V1: Primary";
+
+  const secondaryLabel = secondaryVoiceInfo
+    ? `V2: ${secondaryVoiceInfo.name.split(" ")[0]} (${
+        secondaryVoiceInfo.gender === "male" ? "M" : "F"
+      })`
+    : "+ V2";
+
   const handleDownloadVoiceId = async (id: string) => {
     setDownloadPct(0);
-    await downloadVoice(setDownloadPct); // Hook into your existing download function
+    await downloadVoice(setDownloadPct);
     setInstalledVoiceIds((prev) => {
       const updated = Array.from(new Set([...prev, id]));
-      localStorage.setItem('echoread_installed_voices', JSON.stringify(updated));
+      localStorage.setItem(
+        "echoread_installed_voices",
+        JSON.stringify(updated),
+      );
       return updated;
     });
     setVoiceReady(true);
@@ -81,22 +115,15 @@ export default function App() {
 
   const handleSetPrimary = (id: string) => {
     setPrimaryVoiceId(id);
-    localStorage.setItem('echoread_primary_voice', id);
+    localStorage.setItem("echoread_primary_voice", id);
   };
 
   const handleSetSecondary = (id: string) => {
     setSecondaryVoiceId(id);
-    localStorage.setItem('echoread_secondary_voice', id);
+    localStorage.setItem("echoread_secondary_voice", id);
   };
 
-  // One-tap toggle function for navbar
-  const handleToggleVoiceSlot = () => {
-    if (!secondaryVoiceId) {
-      setIsVoiceModalOpen(true);
-      return;
-    }
-    setActiveVoiceSlot((prev) => (prev === 'primary' ? 'secondary' : 'primary'));
-  };
+
   const loadBooks = async () => {
     const list = await getAllBooks();
     setBooks(list.sort((a, b) => b.updatedAt - a.updatedAt));
@@ -144,7 +171,6 @@ export default function App() {
     await loadBooks();
   };
 
-  // Keep the input value in sync when the reader turns the page
   const handlePageJump = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!activeBook) return;
@@ -183,14 +209,13 @@ export default function App() {
     activeBook?.pages || [],
     activeBook?.currentPage || 0,
     activeBook?.currentLine || 0,
+    currentActiveVoiceId,
   );
 
-  // Unified Playback Controller
   const handleTogglePlay = async () => {
     if (!activeBook || !voiceReady) return;
 
     if (!isPlaying) {
-      // Direct user gesture unlocks hardware audio & requests wake lock
       await ensureAudioUnlocked();
       await requestScreenWakeLock();
     } else {
@@ -214,8 +239,7 @@ export default function App() {
   }, [currentPage, activeBook]);
 
   const ttsLines = activeBook?.pages[currentPage] || [];
-  const displayedLines =
-    activeBook?.displayPages?.[currentPage] || ttsLines;
+  const displayedLines = activeBook?.displayPages?.[currentPage] || ttsLines;
   const { displayToSentence } = useMemo(
     () => mapDisplayToSentences(displayedLines, ttsLines),
     [displayedLines, ttsLines],
@@ -264,7 +288,7 @@ export default function App() {
         pages: extracted.pages,
         displayPages: extracted.displayPages,
         totalPages: extracted.pages.length,
-        coverUrl: extracted.coverUrl, // <--- ADD THIS
+        coverUrl: extracted.coverUrl,
         currentPage: 0,
         currentLine: 0,
         updatedAt: Date.now(),
@@ -276,7 +300,6 @@ export default function App() {
       return;
     }
 
-    // Add brand new book
     const extracted = await extractPdfPages(file);
     const newBook: BookDoc = {
       id: `${cleanTitle}_${Date.now()}`,
@@ -284,7 +307,7 @@ export default function App() {
       pages: extracted.pages,
       displayPages: extracted.displayPages,
       totalPages: extracted.pages.length,
-      coverUrl: extracted.coverUrl, // <--- ADD THIS
+      coverUrl: extracted.coverUrl,
       currentPage: 0,
       currentLine: 0,
       updatedAt: Date.now(),
@@ -295,7 +318,6 @@ export default function App() {
     setActiveBook(newBook);
   };
 
-  // Keep Lock-screen controls in sync with the unified state
   useEffect(() => {
     updateMediaSessionState(isPlaying);
 
@@ -309,7 +331,7 @@ export default function App() {
 
     setupMediaSession({
       title: activeBook.title,
-      artist: "EchoRead Piper TTS",
+      artist: `EchoRead (${currentVoiceInfo?.name || "Piper TTS"})`,
       album: `Page ${currentPage + 1} of ${activeBook.totalPages}`,
       onPlay: handleTogglePlay,
       onPause: handleTogglePlay,
@@ -324,21 +346,21 @@ export default function App() {
         }
       },
     });
-  }, [activeBook, currentPage]);
+  }, [activeBook, currentPage, currentActiveVoiceId]);
 
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
       data-theme={theme}
     >
-
       {/* Top Navbar Section */}
       <header
-        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""
-          }`}
+        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${
+          navbarHidden ? "hidden" : ""
+        }`}
       >
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
-          {/* GROUP 1: Document File + Title (Title wraps into its own row on mobile) */}
+          {/* GROUP 1: Document File + Title */}
           <div className="app-control flex flex-wrap sm:flex-nowrap items-center gap-2 px-2.5 py-1.5 rounded-lg w-full sm:w-auto">
             <input
               type="file"
@@ -364,14 +386,12 @@ export default function App() {
             </span>
           </div>
 
-
           {/* GROUP 2: Page Navigation Controls */}
           {activeBook && (
             <form
               onSubmit={handlePageJump}
               className="app-control flex items-center justify-between gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg w-full sm:w-auto"
             >
-              {/* Previous Button */}
               <button
                 type="button"
                 disabled={currentPage === 0}
@@ -382,7 +402,6 @@ export default function App() {
                 <span>Prev</span>
               </button>
 
-              {/* Center Controls: Locked in a single strict row */}
               <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
                 <span className="app-muted text-xs select-none">Pg</span>
                 <input
@@ -405,7 +424,6 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Next Button */}
               <button
                 type="button"
                 disabled={currentPage >= activeBook.totalPages - 1}
@@ -419,8 +437,9 @@ export default function App() {
               </button>
             </form>
           )}
-    {/* GROUP 3: Voice Slots, Playback & Speed Controls */}
-    <div className="app-control flex flex-col md:flex-row md:items-center gap-2 px-2.5 py-2 rounded-lg w-full md:w-auto min-w-0 max-w-full">
+
+          {/* GROUP 3: Voice Slots, Playback & Speed Controls */}
+          <div className="app-control flex flex-col md:flex-row md:items-center gap-2 px-2.5 py-2 rounded-lg w-full md:w-auto min-w-0 max-w-full">
             {!voiceReady ? (
               <button
                 onClick={handleInstallVoice}
@@ -435,15 +454,13 @@ export default function App() {
               <>
                 {/* Voice Selection & Settings - Always visible */}
                 <div className="flex items-center gap-1.5 w-full md:w-auto min-w-0">
-                  {/* Segmented Switch: Voice 1 vs Voice 2 */}
                   <div className="flex items-center rounded-md border border-inherit bg-black/10 p-0.5 flex-1 md:flex-initial min-w-0">
-                    {/* Primary Voice Option */}
                     <button
                       type="button"
                       onClick={() => setActiveVoiceSlot("primary")}
                       className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
                         activeVoiceSlot === "primary"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
+                          ? "bg-[#f5da81ef] text-black font-bold shadow-xs"
                           : "app-muted hover:opacity-100"
                       }`}
                     >
@@ -454,10 +471,9 @@ export default function App() {
                             : "bg-transparent"
                         }`}
                       />
-                      <span className="truncate">V1: Male</span>
+                      <span className="truncate">{primaryLabel}</span>
                     </button>
 
-                    {/* Secondary Voice Option */}
                     <button
                       type="button"
                       onClick={() => {
@@ -469,7 +485,7 @@ export default function App() {
                       }}
                       className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
                         activeVoiceSlot === "secondary"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
+                          ? "bg-[#f5da81ef] text-black font-bold shadow-xs"
                           : "app-muted hover:opacity-100"
                       }`}
                     >
@@ -480,13 +496,12 @@ export default function App() {
                             : "bg-transparent"
                         }`}
                       />
-                      <span className="truncate">
-                        {secondaryVoiceId ? "V2: Female" : "+ V2"}
-                      </span>
+                      <span className="truncate">{secondaryLabel}</span>
                     </button>
                   </div>
 
-                  {/* Manage Voices Button */}
+               
+
                   <button
                     type="button"
                     onClick={() => setIsVoiceModalOpen(true)}
@@ -497,7 +512,7 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Play/Pause & Speed Controller - Only shown when activeBook is loaded */}
+                {/* Play/Pause & Speed Controls - Visible only when an active book is loaded */}
                 {activeBook && (
                   <>
                     <div className="hidden md:block h-5 w-px bg-inherit/40 mx-0.5 shrink-0" />
@@ -567,8 +582,9 @@ export default function App() {
             type="button"
             onClick={handleTogglePlay}
             disabled={!activeBook || !voiceReady}
-            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${isPlaying ? "app-pause" : "app-play"
-              } disabled:opacity-25`}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${
+              isPlaying ? "app-pause" : "app-play"
+            } disabled:opacity-25`}
           >
             {isPlaying ? "⏸" : "▶"}
           </button>
@@ -584,7 +600,6 @@ export default function App() {
 
       {/* Two-Column App Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* PDF Reading Area with Explicit Border Outline */}
         <main className="app-panel lg:col-span-8 rounded-lg flex flex-col shadow-xl overflow-hidden">
           <div className="app-panel-header px-5 py-3 flex items-center justify-between text-xs">
             <span>
@@ -648,10 +663,10 @@ export default function App() {
                   const lineState = isCurrent
                     ? "is-current"
                     : isQueued
-                      ? "is-queued"
-                      : isProcessed
-                        ? "is-processed"
-                        : "is-pending";
+                    ? "is-queued"
+                    : isProcessed
+                    ? "is-processed"
+                    : "is-pending";
 
                   return (
                     <div
@@ -678,7 +693,6 @@ export default function App() {
           </div>
         </main>
 
-        {/* Saved Books / Shelf Section */}
         <aside className="lg:col-span-4 flex flex-col">
           <BookShelf
             books={books}
@@ -690,7 +704,6 @@ export default function App() {
             }}
             onDeleteBook={handleDeleteBook}
             onAddBook={handleAddOrUploadBook}
-
             pageSize={5}
             theme={theme}
           />

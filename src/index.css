@@ -184,7 +184,7 @@ code {
   --row-selected-text: #2c302e;
   --progress-track: #e2ded6;
   --progress-fill: #6b746c;
-  --play-bg: rgba(245, 218, 129, 0.853)  ;
+  --play-bg: #f5da81ef  ;
   --play-text: #635d5d;
   --pause-bg: #ece6d8;
   --pause-text: #2c302e;

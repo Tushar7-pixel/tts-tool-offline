@@ -7,8 +7,8 @@ const PREFETCH_AHEAD = 3;
 
 type LinePos = { pageIdx: number; lineIdx: number; text: string };
 
-function posKey(pageIdx: number, lineIdx: number) {
-  return `${pageIdx}:${lineIdx}`;
+function posKey(pageIdx: number, lineIdx: number, voiceId?: string) {
+  return `${voiceId || "default"}:${pageIdx}:${lineIdx}`;
 }
 
 function collectLines(
@@ -40,6 +40,7 @@ export function useReader(
   pages: string[][],
   initialPage: number,
   initialLine: number,
+  voiceId?: string,
 ) {
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [currentLine, setCurrentLine] = useState(initialLine);
@@ -55,6 +56,7 @@ export function useReader(
   const pagesRef = useRef(pages);
   const bookIdRef = useRef(bookId);
   const currentPageRef = useRef(initialPage);
+  const voiceIdRef = useRef(voiceId);
   const isPlayingRef = useRef(false);
   const blobCacheRef = useRef(new Map<string, Blob>());
   const inflightRef = useRef(new Map<string, Promise<Blob>>());
@@ -63,6 +65,7 @@ export function useReader(
 
   pagesRef.current = pages;
   bookIdRef.current = bookId;
+  voiceIdRef.current = voiceId;
 
   useEffect(() => {
     speedRef.current = speed;
@@ -76,6 +79,33 @@ export function useReader(
     setCurrentLine(initialLine);
     currentPageRef.current = initialPage;
   }, [bookId, initialPage, initialLine]);
+
+  // Reset audio cache and restart stream if the voice changes mid-read
+  useEffect(() => {
+    if (voiceIdRef.current === voiceId) return;
+    voiceIdRef.current = voiceId;
+
+    const wasPlaying = isPlayingRef.current;
+    sessionRef.current += 1;
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.pause();
+    }
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+      objectUrlRef.current = null;
+    }
+    blobCacheRef.current.clear();
+    inflightRef.current.clear();
+    setQueuedLines([]);
+    setProcessedLines([]);
+
+    if (wasPlaying) {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      playLineAt(currentPageRef.current, currentLine);
+    }
+  }, [voiceId, currentLine]);
 
   useEffect(() => {
     sessionRef.current += 1;
@@ -122,9 +152,9 @@ export function useReader(
   const processedForPage = (pageIdx: number) => {
     const lines: number[] = [];
     for (const key of blobCacheRef.current.keys()) {
-      const sep = key.indexOf(":");
-      const p = Number(key.slice(0, sep));
-      const l = Number(key.slice(sep + 1));
+      const parts = key.split(":");
+      const p = Number(parts[1]);
+      const l = Number(parts[2]);
       if (p === pageIdx) lines.push(l);
     }
     lines.sort((a, b) => a - b);
@@ -137,7 +167,8 @@ export function useReader(
 
   const pruneCacheToPage = (pageIdx: number) => {
     for (const key of [...blobCacheRef.current.keys()]) {
-      const p = Number(key.slice(0, key.indexOf(":")));
+      const parts = key.split(":");
+      const p = Number(parts[1]);
       if (p !== pageIdx) blobCacheRef.current.delete(key);
     }
     publishProcessed(pageIdx);
@@ -170,7 +201,7 @@ export function useReader(
   };
 
   const getBlob = (pos: LinePos, session: number): Promise<Blob | null> => {
-    const key = posKey(pos.pageIdx, pos.lineIdx);
+    const key = posKey(pos.pageIdx, pos.lineIdx, voiceIdRef.current);
     const cached = blobCacheRef.current.get(key);
     if (cached) return Promise.resolve(cached);
 
