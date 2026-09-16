@@ -9,6 +9,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 export type ExtractedPdf = {
   pages: string[][];
   displayPages: string[][];
+  coverUrl?: string;
 };
 
 type PdfTextItem = {
@@ -187,6 +188,10 @@ export function mapDisplayToSentences(
 export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   const buffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+  // 1. Generate page 1 thumbnail using the loaded `pdf` document proxy
+  const coverUrl = await generatePdfThumbnail(pdf);
+
   const pages: string[][] = [];
   const displayPages: string[][] = [];
 
@@ -194,6 +199,7 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
     const page = await pdf.getPage(pageNum);
     const content = await page.getTextContent();
     const items: PdfTextItem[] = [];
+
     for (const item of content.items) {
       if (!isTextItem(item)) continue;
       items.push({
@@ -220,5 +226,40 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
     pages.push(sentences.length > 0 ? sentences : [EMPTY_PAGE]);
   }
 
-  return { pages, displayPages };
+  // 2. Return the generated coverUrl alongside the parsed text pages
+  return { pages, displayPages, coverUrl };
+}
+
+export async function generatePdfThumbnail(pdf: pdfjsLib.PDFDocumentProxy): Promise<string | undefined> {
+  try {
+    const page = await pdf.getPage(1);
+    const unscaledViewport = page.getViewport({ scale: 1 });
+    
+    // Scale target: width of 120px for crisp, lightweight cover
+    const scale = 120 / unscaledViewport.width;
+    const viewport = page.getViewport({ scale });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return undefined;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Pass both canvas and canvasContext to satisfy RenderParameters
+    const renderTask = page.render({
+      canvas: canvas,
+      canvasContext: ctx,
+      viewport: viewport,
+    });
+
+    await renderTask.promise;
+    return canvas.toDataURL('image/jpeg', 0.82);
+  } catch (err) {
+    console.error('PDF Cover thumbnail generation error:', err);
+    return undefined;
+  }
 }

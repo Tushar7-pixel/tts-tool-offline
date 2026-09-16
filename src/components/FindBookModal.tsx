@@ -16,19 +16,8 @@ interface FindBookModalProps {
   theme: ReaderTheme;
 }
 
-const SUPPORTED_LANGUAGES = [
-  { code: 'eng', label: 'English' },
-  { code: '', label: 'All Languages' },
-  { code: 'spa', label: 'Spanish' },
-  { code: 'fre', label: 'French' },
-  { code: 'ger', label: 'German' },
-  { code: 'hin', label: 'Hindi' },
-  { code: 'ita', label: 'Italian' },
-];
-
 export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, theme }) => {
   const [query, setQuery] = useState('');
-  const [lang, setLang] = useState('eng'); // Default to English
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,13 +32,10 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
     setLoading(true);
     setError(null);
 
-    // Append language filter if selected (e.g. "Normal People language:eng")
-    const searchString = lang ? `${cleanQuery} language:${lang}` : cleanQuery;
-
     try {
       const res = await fetch(
         `https://openlibrary.org/search.json?q=${encodeURIComponent(
-          searchString
+          cleanQuery
         )}&limit=12&fields=key,title,author_name,first_publish_year,cover_i`
       );
       if (!res.ok) throw new Error('Search failed');
@@ -62,10 +48,23 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
     }
   };
 
-  const openOceanOfPdf = (title: string, author?: string) => {
-    const searchTerm = author ? `${title} ${author}` : title;
-    const url = `https://oceanofpdf.com/?s=${encodeURIComponent(searchTerm)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const openDownload = (type: 'archive' | 'ocean', book: BookResult) => {
+    const author = book.author_name?.[0];
+    const query = author ? `${book.title} ${author}` : book.title;
+
+    if (type === 'archive') {
+      window.open(
+        `https://archive.org/search?query=${encodeURIComponent(query)}&and[]=mediatype%3A"texts"`,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    } else {
+      window.open(
+        `https://oceanofpdf.com/?s=${encodeURIComponent(query)}`,
+        '_blank',
+        'noopener,noreferrer'
+      );
+    }
   };
 
   return (
@@ -74,7 +73,7 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-sans"
     >
       <div className="app-panel w-full max-w-2xl max-h-[85vh] rounded-xl flex flex-col shadow-2xl overflow-hidden border">
-        
+
         {/* Modal Header */}
         <div className="app-panel-header px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -92,31 +91,16 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
           </button>
         </div>
 
-        {/* Search & Language Bar */}
-        <form onSubmit={handleSearch} className="p-4 border-b border-inherit bg-black/5 flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 flex gap-2">
-            <input
-              type="text"
-              placeholder="Search by title or author..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="app-input flex-1 rounded-md px-3 py-2 text-xs focus:outline-none transition"
-              autoFocus
-            />
-            {/* Language Dropdown */}
-            <select
-              value={lang}
-              onChange={(e) => setLang(e.target.value)}
-              className="app-input rounded-md px-2 py-2 text-xs cursor-pointer focus:outline-none"
-            >
-              {SUPPORTED_LANGUAGES.map((l) => (
-                <option key={l.code} value={l.code} className="bg-[#14151a] text-zinc-200">
-                  {l.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
+        {/* Streamlined Search Bar */}
+        <form onSubmit={handleSearch} className="p-4 border-b border-inherit bg-black/5 flex gap-2">
+          <input
+            type="text"
+            placeholder="Search by title or author..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="app-input flex-1 rounded-md px-3 py-2 text-xs focus:outline-none transition"
+            autoFocus
+          />
           <button
             type="submit"
             disabled={loading}
@@ -134,7 +118,7 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
             <div className="py-12 text-center app-muted text-xs space-y-1">
               <p>Type a book name above to search covers & metadata.</p>
               <p className="text-[11px] opacity-75">
-                Filtered to <strong>{SUPPORTED_LANGUAGES.find(l => l.code === lang)?.label}</strong> editions.
+                Download buttons will open direct search mirrors on external repositories.
               </p>
             </div>
           )}
@@ -148,16 +132,15 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
             return (
               <div
                 key={book.key}
-                onClick={() => openOceanOfPdf(book.title, author)}
-                className="app-control group flex gap-4 p-3 rounded-lg cursor-pointer transition shadow-sm border border-transparent hover:border-inherit"
+                className="app-control group flex gap-3.5 p-3 rounded-lg border border-inherit shadow-sm transition"
               >
                 {/* Book Cover */}
-                <div className="w-14 h-20 bg-black/20 rounded border border-inherit flex items-center justify-center shrink-0 overflow-hidden">
+                <div className="w-16 h-24 bg-black/10 rounded border border-inherit flex items-center justify-center shrink-0 overflow-hidden">
                   {coverUrl ? (
                     <img
                       src={coverUrl}
                       alt={book.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                      className="w-full h-full object-cover"
                       loading="lazy"
                     />
                   ) : (
@@ -165,32 +148,54 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({ isOpen, onClose, t
                   )}
                 </div>
 
-                {/* Info */}
-                <div className="flex-1 flex flex-col justify-between py-0.5 min-w-0">
+                {/* Book Info & Responsive Actions */}
+                <div className="flex-1 flex flex-col justify-between min-w-0">
                   <div>
-                    <h3 className="text-xs font-semibold truncate group-hover:underline">
+                    <h3 className="text-xs font-bold truncate" title={book.title}>
                       {book.title}
                     </h3>
                     <p className="text-[11px] app-muted mt-0.5 truncate">
                       {author || 'Unknown Author'}
                       {book.first_publish_year && (
-                        <span className="opacity-60 ml-1.5">({book.first_publish_year})</span>
+                        <span className="opacity-60 ml-1.5 font-mono">({book.first_publish_year})</span>
                       )}
                     </p>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[10px] app-muted">
-                      OceanofPDF ↗
-                    </span>
-                    <span className="text-[11px] app-accent font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                      Download PDF ↗
-                    </span>
+                  {/* Actions: 2 stacked rows on mobile, 2 columns on desktop */}
+                  <div className="pt-2 mt-2 border-t border-inherit/30 flex flex-col sm:flex-row gap-1.5 w-full">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDownload('archive', book);
+                      }}
+                      className="app-btn text-[11px] font-medium py-1.5 px-2.5 rounded flex items-center justify-center gap-1 cursor-pointer transition active:scale-[0.98] w-full sm:flex-1"
+                    >
+                      <span className="truncate">Archive</span>
+                      <span className="text-[10px] opacity-70 shrink-0">↗</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDownload('ocean', book);
+                      }}
+                      className="app-btn app-accent text-[11px] font-bold py-1.5 px-2.5 rounded flex items-center justify-center gap-1 cursor-pointer transition active:scale-[0.98] w-full sm:flex-1"
+                    >
+                      <span className="truncate">OceanofPDF</span>
+                      <span className="text-[10px] shrink-0">↗</span>
+                    </button>
                   </div>
                 </div>
               </div>
             );
           })}
+
+          <p className="text-[10px] app-muted text-center pt-2">
+            Tip: Third-party download mirrors may trigger popups; an ad-blocker or brave browser is recommended.
+          </p>
         </div>
       </div>
     </div>

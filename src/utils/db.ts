@@ -11,6 +11,7 @@ export type BookDoc = {
     displayPages?: string[][]; // PDF visual lines per page (display only)
     totalPages: number;
     currentPage: number;
+    coverUrl?: string;
     currentLine: number;
     updatedAt: number;
 };

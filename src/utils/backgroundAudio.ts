@@ -1,43 +1,36 @@
 // src/utils/backgroundAudio.ts
 
-// 1-second silent WAV encoded as base64
-const SILENT_AUDIO_URI =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
-
-let bgAudioEl: HTMLAudioElement | null = null;
 let wakeLockSentinel: WakeLockSentinel | null = null;
+let sharedAudioContext: AudioContext | null = null;
 
-export function initBackgroundAudioAnchor(): HTMLAudioElement {
-  if (!bgAudioEl) {
-    bgAudioEl = new Audio(SILENT_AUDIO_URI);
-    bgAudioEl.loop = true;
-    bgAudioEl.volume = 0.01; // Low volume keeps the OS audio session active without audible hiss
+// Re-use a single AudioContext across the entire app
+export function getSharedAudioContext(): AudioContext {
+  if (!sharedAudioContext || sharedAudioContext.state === 'closed') {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedAudioContext = new AudioCtx();
   }
-  return bgAudioEl;
+  return sharedAudioContext;
 }
 
-export async function startBackgroundAudioSession() {
-  const el = initBackgroundAudioAnchor();
-  try {
-    await el.play();
-  } catch (err) {
-    console.warn('Background audio anchor autoplay prevented:', err);
+export async function ensureAudioUnlocked(): Promise<AudioContext> {
+  const ctx = getSharedAudioContext();
+  if (ctx.state === 'suspended') {
+    await ctx.resume();
   }
+  return ctx;
+}
 
-  // Request foreground wake lock
-  if ('wakeLock' in navigator) {
+export async function requestScreenWakeLock() {
+  if ('wakeLock' in navigator && !wakeLockSentinel) {
     try {
       wakeLockSentinel = await navigator.wakeLock.request('screen');
     } catch {
-      // Ignored if device battery is low or unsupported
+      // Ignored if device battery optimization rejects it
     }
   }
 }
 
-export function pauseBackgroundAudioSession() {
-  if (bgAudioEl && !bgAudioEl.paused) {
-    bgAudioEl.pause();
-  }
+export function releaseScreenWakeLock() {
   if (wakeLockSentinel) {
     wakeLockSentinel.release().catch(() => {});
     wakeLockSentinel = null;

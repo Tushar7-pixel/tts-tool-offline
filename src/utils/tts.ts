@@ -1,7 +1,7 @@
 // src/utils/tts.ts
 import * as ort from 'onnxruntime-web';
 import * as tts from '@mintplex-labs/piper-tts-web';
-
+import { getSharedAudioContext } from './backgroundAudio';
 // Point WASM binary paths to your local public assets
 ort.env.wasm.wasmPaths = '/onnx-wasm/';
 
@@ -33,3 +33,18 @@ export async function synthesize(text: string): Promise<Blob> {
         voiceId: VOICE_ID,
     });
 }
+
+export async function playRawAudioBuffer(audioData: Float32Array | AudioBuffer) {
+    const ctx = getSharedAudioContext();
+    
+    // AudioContext MUST be running
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
+  
+    // Create source and play as normal
+    const source = ctx.createBufferSource();
+    // ... bind buffer and connect to ctx.destination
+    source.connect(ctx.destination);
+    source.start(0);
+  }
