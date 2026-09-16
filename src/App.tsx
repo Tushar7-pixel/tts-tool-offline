@@ -50,22 +50,22 @@ export default function App() {
     const saved = localStorage.getItem('echoread_installed_voices');
     return saved ? JSON.parse(saved) : ['en_US-hfc_male-medium'];
   });
-  
+
   const [primaryVoiceId, setPrimaryVoiceId] = useState<string>(() => {
     return localStorage.getItem('echoread_primary_voice') || 'en_US-hfc_male-medium';
   });
-  
+
   const [secondaryVoiceId, setSecondaryVoiceId] = useState<string | null>(() => {
     return localStorage.getItem('echoread_secondary_voice') || 'en_US-hfc_female-medium';
   });
-  
+
   // Which slot is actively speaking ('primary' | 'secondary')
   const [activeVoiceSlot, setActiveVoiceSlot] = useState<'primary' | 'secondary'>('primary');
-  
+
   // Derive active voice metadata
   const currentActiveVoiceId = activeVoiceSlot === 'primary' ? primaryVoiceId : (secondaryVoiceId || primaryVoiceId);
   const currentVoiceInfo = AVAILABLE_VOICES.find(v => v.id === currentActiveVoiceId);
-  
+
   // Handle downloading new voice model
   const handleDownloadVoiceId = async (id: string) => {
     setDownloadPct(0);
@@ -78,17 +78,17 @@ export default function App() {
     setVoiceReady(true);
     setDownloadPct(null);
   };
-  
+
   const handleSetPrimary = (id: string) => {
     setPrimaryVoiceId(id);
     localStorage.setItem('echoread_primary_voice', id);
   };
-  
+
   const handleSetSecondary = (id: string) => {
     setSecondaryVoiceId(id);
     localStorage.setItem('echoread_secondary_voice', id);
   };
-  
+
   // One-tap toggle function for navbar
   const handleToggleVoiceSlot = () => {
     if (!secondaryVoiceId) {
@@ -364,7 +364,7 @@ export default function App() {
             </span>
           </div>
 
-       
+
           {/* GROUP 2: Page Navigation Controls */}
           {activeBook && (
             <form
@@ -419,78 +419,124 @@ export default function App() {
               </button>
             </form>
           )}
-          {/* GROUP 3: Voice Selection, Playback & Speed Controls */}
-          <div className="app-control flex flex-wrap sm:flex-nowrap items-center justify-between sm:justify-start gap-2 px-2.5 py-1.5 rounded-lg w-full sm:w-auto">
-  <div className="flex items-center gap-2">
-    {!voiceReady ? (
-      <button
-        onClick={handleInstallVoice}
-        disabled={downloadPct !== null}
-        className="app-btn text-xs px-2.5 py-1 rounded cursor-pointer"
-      >
-        {downloadPct !== null
-          ? `Loading (${downloadPct}%)`
-          : "Load Voice (63MB)"}
-      </button>
-    ) : (
-      /* Interactive Voice Switcher & Modal Trigger */
-      <div className="flex items-center rounded-md border border-inherit bg-black/10 p-0.5">
-        <button
-          type="button"
-          onClick={handleToggleVoiceSlot}
-          title={`Click to switch to ${activeVoiceSlot === 'primary' ? 'Secondary' : 'Primary'} voice`}
-          className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded font-mono font-semibold cursor-pointer hover:opacity-90 transition select-none"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"></span>
-          <span>
-            {activeVoiceSlot === 'primary' ? 'Voice 1' : 'Voice 2'}:{' '}
-            {currentVoiceInfo?.name.split(' ')[0] || 'Default'} (
-            {currentVoiceInfo?.gender === 'male' ? 'M' : 'F'})
-          </span>
-          <span className="text-[9px] opacity-70 ml-0.5">⇄</span>
-        </button>
+    {/* GROUP 3: Voice Slots, Playback & Speed Controls */}
+    <div className="app-control flex flex-col md:flex-row md:items-center gap-2 px-2.5 py-2 rounded-lg w-full md:w-auto min-w-0 max-w-full">
+            {!voiceReady ? (
+              <button
+                onClick={handleInstallVoice}
+                disabled={downloadPct !== null}
+                className="app-btn text-xs font-semibold px-3 py-2 rounded cursor-pointer w-full md:w-auto"
+              >
+                {downloadPct !== null
+                  ? `Loading Voice (${downloadPct}%)`
+                  : "Load Voice (63MB)"}
+              </button>
+            ) : (
+              <>
+                {/* Voice Selection & Settings - Always visible */}
+                <div className="flex items-center gap-1.5 w-full md:w-auto min-w-0">
+                  {/* Segmented Switch: Voice 1 vs Voice 2 */}
+                  <div className="flex items-center rounded-md border border-inherit bg-black/10 p-0.5 flex-1 md:flex-initial min-w-0">
+                    {/* Primary Voice Option */}
+                    <button
+                      type="button"
+                      onClick={() => setActiveVoiceSlot("primary")}
+                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
+                        activeVoiceSlot === "primary"
+                          ? "bg-amber-400 text-black font-bold shadow-xs"
+                          : "app-muted hover:opacity-100"
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          activeVoiceSlot === "primary"
+                            ? "bg-black animate-pulse"
+                            : "bg-transparent"
+                        }`}
+                      />
+                      <span className="truncate">V1: Male</span>
+                    </button>
 
-        <button
-          type="button"
-          onClick={() => setIsVoiceModalOpen(true)}
-          title="Manage voices & accents"
-          className="text-xs px-1.5 py-0.5 app-muted hover:opacity-100 cursor-pointer border-l border-inherit"
-        >
-          ⚙️
-        </button>
-      </div>
-    )}
+                    {/* Secondary Voice Option */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!secondaryVoiceId) {
+                          setIsVoiceModalOpen(true);
+                        } else {
+                          setActiveVoiceSlot("secondary");
+                        }
+                      }}
+                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
+                        activeVoiceSlot === "secondary"
+                          ? "bg-amber-400 text-black font-bold shadow-xs"
+                          : "app-muted hover:opacity-100"
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          activeVoiceSlot === "secondary"
+                            ? "bg-black animate-pulse"
+                            : "bg-transparent"
+                        }`}
+                      />
+                      <span className="truncate">
+                        {secondaryVoiceId ? "V2: Female" : "+ V2"}
+                      </span>
+                    </button>
+                  </div>
 
-    <button
-      onClick={handleTogglePlay}
-      disabled={!activeBook || !voiceReady}
-      className={`px-3.5 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-        isPlaying ? "app-pause" : "app-play"
-      } disabled:opacity-25`}
-    >
-      {isPlaying ? "⏸ Pause" : "▶ Play"}
-    </button>
-  </div>
+                  {/* Manage Voices Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsVoiceModalOpen(true)}
+                    title="Open Voice Library"
+                    className="app-btn text-xs font-semibold px-2 py-1 rounded-md transition cursor-pointer shrink-0 flex items-center"
+                  >
+                    <span>⚙️</span>
+                  </button>
+                </div>
 
-  <div className="hidden sm:block h-4 w-px bg-inherit/40 mx-0.5" />
+                {/* Play/Pause & Speed Controller - Only shown when activeBook is loaded */}
+                {activeBook && (
+                  <>
+                    <div className="hidden md:block h-5 w-px bg-inherit/40 mx-0.5 shrink-0" />
+                    <div className="md:hidden w-full h-px bg-inherit/25" />
 
-  {/* Speed Slider */}
-  <div className="flex items-center justify-between sm:justify-start gap-2 w-full sm:w-auto pt-1 sm:pt-0 border-t sm:border-t-0 border-inherit/30">
-    <span className="text-[11px] app-muted select-none">Speed</span>
-    <input
-      type="range"
-      min="0.5"
-      max="2.0"
-      step="0.1"
-      value={speed}
-      onChange={(e) => setSpeed(parseFloat(e.target.value))}
-      className="flex-1 sm:w-20 accent-current cursor-pointer h-1 rounded"
-    />
-    <span className="text-xs app-accent font-mono font-bold w-8 text-right tabular-nums select-none">
-      {speed.toFixed(1)}×
-    </span>
-  </div>
-</div>
+                    <div className="flex items-center gap-2.5 w-full md:w-auto min-w-0">
+                      <button
+                        onClick={handleTogglePlay}
+                        disabled={!voiceReady}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shrink-0 ${
+                          isPlaying ? "app-pause" : "app-play"
+                        } disabled:opacity-25`}
+                      >
+                        {isPlaying ? "⏸ Pause" : "▶ Play"}
+                      </button>
+
+                      <div className="flex items-center gap-2 flex-1 md:flex-initial min-w-0">
+                        <span className="text-[11px] app-muted select-none shrink-0">
+                          Speed
+                        </span>
+                        <input
+                          type="range"
+                          min="0.5"
+                          max="2.0"
+                          step="0.1"
+                          value={speed}
+                          onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                          className="w-full min-w-0 md:w-20 accent-current cursor-pointer h-1 rounded"
+                        />
+                        <span className="text-xs app-accent font-mono font-bold w-7 text-right tabular-nums select-none shrink-0">
+                          {speed.toFixed(1)}×
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </div>
 
           {/* GROUP 4: Chrome & Appearance Menu */}
           <div className="flex items-center justify-end gap-2 w-full sm:w-auto shrink-0">
