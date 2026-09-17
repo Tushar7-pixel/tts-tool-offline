@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef } from "react";
 import type { BookDoc } from "../utils/db";
 import { FindBookModal } from "./FindBookModal";
-
+import { ExploreBooksModal } from "./ExploreBooksModal";
 interface BookShelfProps {
   books: BookDoc[];
   activeBookId: string | null;
@@ -29,6 +29,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   const [shelfPage, setShelfPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isFindModalOpen, setIsFindModalOpen] = useState(false);
+  const [isExploreModalOpen, setIsExploreModalOpen] = useState(false);
 
   const filteredBooks = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -150,7 +151,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                         {/* Cover + Title + Progress Bar */}
                         <td className="py-2.5 pr-2 truncate">
                           <div className="flex items-center gap-2.5 min-w-0">
-                        
+
                             <div className="w-9 h-12 rounded bg-black/10 border border-inherit flex items-center justify-center shrink-0 overflow-hidden">
                               {b.coverUrl ? (
                                 <img
@@ -238,14 +239,23 @@ export const BookShelf: React.FC<BookShelfProps> = ({
           )}
 
           {/* Shelf Bottom Footer */}
-          <div className="pt-3 mt-auto">
+          <div className="mt-3 flex gap-2 w-full">
             <button
               type="button"
               onClick={() => setIsFindModalOpen(true)}
-              className="app-btn w-full text-xs font-semibold py-2 px-4 rounded-md flex items-center justify-center gap-2 transition cursor-pointer active:scale-[0.99] border border-inherit"
+              className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition"
             >
               <span>🔍</span>
               <span>Find Book Online</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsExploreModalOpen(true)}
+              className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition"
+            >
+              <span>🧭</span>
+              <span>Explore Books</span>
             </button>
           </div>
         </div>
@@ -254,6 +264,12 @@ export const BookShelf: React.FC<BookShelfProps> = ({
       <FindBookModal
         isOpen={isFindModalOpen}
         onClose={() => setIsFindModalOpen(false)}
+        theme={theme}
+      // onAddBook={onAddBook}
+      />
+      <ExploreBooksModal
+        isOpen={isExploreModalOpen}
+        onClose={() => setIsExploreModalOpen(false)}
         theme={theme}
       />
     </>
