@@ -3,6 +3,8 @@ import React, { useState, useMemo, useRef } from "react";
 import type { BookDoc } from "../utils/db";
 import { FindBookModal } from "./FindBookModal";
 import { ExploreBooksModal } from "./ExploreBooksModal";
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+
 interface BookShelfProps {
   books: BookDoc[];
   activeBookId: string | null;
@@ -28,6 +30,8 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [shelfPage, setShelfPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const isOnline = useOnlineStatus();
+  // const isOnline = useOnlineStatus();
   const [isFindModalOpen, setIsFindModalOpen] = useState(false);
   const [isExploreModalOpen, setIsExploreModalOpen] = useState(false);
 
@@ -238,40 +242,53 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </div>
           )}
 
-          {/* Shelf Bottom Footer */}
-          <div className="mt-3 flex gap-2 w-full">
-            <button
-              type="button"
-              onClick={() => setIsFindModalOpen(true)}
-              className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition"
-            >
-              <span>🔍</span>
-              <span>Find Book Online</span>
-            </button>
+         {/* Online Navigation Action Cluster */}
+      <div className="mt-3 flex flex-col gap-1.5 w-full">
+        <div className="flex gap-2 w-full">
+          <button
+            type="button"
+            disabled={!isOnline}
+            onClick={() => setIsFindModalOpen(true)}
+            title={isOnline ? 'Search books across repositories' : 'Internet connection required'}
+            className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <span>🔍</span>
+            <span>Find Book Online</span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => setIsExploreModalOpen(true)}
-              className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition"
-            >
-              <span>🧭</span>
-              <span>Explore Books</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            disabled={!isOnline}
+            onClick={() => setIsExploreModalOpen(true)}
+            title={isOnline ? 'Browse genres and author catalogs' : 'Internet connection required'}
+            className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <span>🧭</span>
+            <span>Explore Books</span>
+          </button>
+        </div>
+
+        {!isOnline && (
+          <p className="text-[10px] app-muted text-center tracking-tight select-none">
+            ⚡ Offline mode: online catalog and discovery are disabled.
+          </p>
+        )}
+      </div>
         </div>
       </div>
 
-      <FindBookModal
-        isOpen={isFindModalOpen}
+    {/* Modals */}
+    <FindBookModal
+        isOpen={isFindModalOpen && isOnline}
         onClose={() => setIsFindModalOpen(false)}
         theme={theme}
-      // onAddBook={onAddBook}
       />
       <ExploreBooksModal
-        isOpen={isExploreModalOpen}
+        isOpen={isExploreModalOpen && isOnline}
         onClose={() => setIsExploreModalOpen(false)}
         theme={theme}
       />
+    
     </>
   );
 };

@@ -7,6 +7,7 @@ import {
   type VoiceGender,
   type VoiceAccent,
 } from '../utils/voiceCatalog';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 interface VoiceManagerModalProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
   onSetMaleVoice,
   onSetFemaleVoice,
 }) => {
+  const isOnline = useOnlineStatus();
   const [genderFilter, setGenderFilter] = useState<'all' | VoiceGender>('all');
   const [accentFilter, setAccentFilter] = useState<'all' | VoiceAccent>('all');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -51,6 +53,8 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
   if (!isOpen) return null;
 
   const handleToggleSample = (voice: VoiceOption) => {
+    if (!isOnline) return;
+
     if (playingSampleId === voice.id && sampleAudioRef.current) {
       sampleAudioRef.current.pause();
       setPlayingSampleId(null);
@@ -82,6 +86,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
   });
 
   const handleDownload = async (id: string) => {
+    if (!isOnline) return;
     setDownloadingId(id);
     try {
       await onDownloadVoice(id);
@@ -112,6 +117,14 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
             ✕
           </button>
         </div>
+
+        {/* Offline Warning Banner */}
+        {!isOnline && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-amber-500 text-[11px] font-medium flex items-center justify-center gap-1.5 shrink-0">
+            <span>⚡</span>
+            <span>Offline mode: Streaming samples and downloading new voices are unavailable.</span>
+          </div>
+        )}
 
         {/* Filters */}
         <div className="p-3 sm:p-4 border-b border-inherit bg-black/5 flex flex-wrap gap-2 items-center justify-between">
@@ -181,15 +194,17 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
                       {voice.accent === 'american' ? 'US' : 'UK'}
                     </span>
 
+                    {/* Sample Audio Button (Requires Online) */}
                     <button
                       type="button"
+                      disabled={!isOnline}
                       onClick={() => handleToggleSample(voice)}
-                      className={`text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1 transition cursor-pointer ${
+                      className={`text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                         isPlayingSample
                           ? 'bg-amber-400 text-black font-bold'
                           : 'app-btn border border-inherit'
                       }`}
-                      title="Listen to sample"
+                      title={isOnline ? 'Listen to sample' : 'Internet connection required for audio samples'}
                     >
                       <span>{isPlayingSample ? '⏹ Stop' : '▶ Sample'}</span>
                     </button>
@@ -205,13 +220,19 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
                   {!isInstalled ? (
                     <button
                       type="button"
-                      disabled={isDownloading || downloadingId !== null}
+                      disabled={!isOnline || isDownloading || downloadingId !== null}
                       onClick={() => handleDownload(voice.id)}
-                      className="app-btn text-xs font-semibold px-3 py-1.5 rounded transition cursor-pointer disabled:opacity-40 w-full sm:w-auto"
+                      title={isOnline ? undefined : 'Connect to the internet to download'}
+                      className="app-btn text-xs font-semibold px-3 py-1.5 rounded transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed w-full sm:w-auto"
                     >
-                      {isDownloading ? 'Downloading...' : `Download (${voice.sizeMb}MB)`}
+                      {isDownloading
+                        ? 'Downloading...'
+                        : !isOnline
+                        ? 'Offline'
+                        : `Download (${voice.sizeMb}MB)`}
                     </button>
                   ) : (
+                    /* Existing downloaded voices can still be assigned while offline */
                     <button
                       type="button"
                       onClick={() => {
@@ -243,7 +264,9 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
         </div>
 
         <div className="p-3 border-t border-inherit/40 text-center app-muted text-[11px]">
-          Audio previews stream in memory without taking storage.
+          {isOnline
+            ? 'Audio previews stream in memory without taking storage.'
+            : 'Installed voices function completely offline.'}
         </div>
       </div>
     </div>
