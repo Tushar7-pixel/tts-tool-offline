@@ -47,57 +47,62 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const activeLineRef = useRef<HTMLDivElement | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
-
+  // Installed models list
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem("echoread_installed_voices");
-    return saved ? JSON.parse(saved) : ["en_US-hfc_male-medium"];
+    const saved = localStorage.getItem('echoread_installed_voices');
+    return saved ? JSON.parse(saved) : ['en_US-hfc_male-medium'];
   });
 
-  const [primaryVoiceId, setPrimaryVoiceId] = useState<string>(() => {
-    return (
-      localStorage.getItem("echoread_primary_voice") ||
-      "en_US-hfc_male-medium"
-    );
+  // Male & Female Voice Configurations
+  const [maleVoiceId, setMaleVoiceId] = useState<string>(() => {
+    return localStorage.getItem('echoread_male_voice') || 'en_US-hfc_male-medium';
   });
 
-  const [secondaryVoiceId, setSecondaryVoiceId] = useState<string | null>(() => {
-    return (
-      localStorage.getItem("echoread_secondary_voice") ||
-      "en_US-hfc_female-medium"
-    );
+  const [femaleVoiceId, setFemaleVoiceId] = useState<string | null>(() => {
+    return localStorage.getItem('echoread_female_voice') || 'en_US-hfc_female-medium';
   });
 
-  // Slot currently active ('primary' | 'secondary')
-  const [activeVoiceSlot, setActiveVoiceSlot] = useState<"primary" | "secondary">(
-    "primary",
-  );
+  // Active Gender Slot ('male' | 'female')
+  const [activeGender, setActiveGender] = useState<'male' | 'female'>('male');
 
-  // Active voice metadata
-  const currentActiveVoiceId =
-    activeVoiceSlot === "primary"
-      ? primaryVoiceId
-      : secondaryVoiceId || primaryVoiceId;
+  // Verify availability in downloaded cache
+  const isMaleReady = installedVoiceIds.includes(maleVoiceId);
+  const isFemaleReady = Boolean(femaleVoiceId && installedVoiceIds.includes(femaleVoiceId));
+  const canToggleVoices = isMaleReady && isFemaleReady;
 
-  const currentVoiceInfo = AVAILABLE_VOICES.find(
-    (v) => v.id === currentActiveVoiceId,
-  );
-  const primaryVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === primaryVoiceId);
-  const secondaryVoiceInfo = AVAILABLE_VOICES.find(
-    (v) => v.id === secondaryVoiceId,
-  );
+  // Active Voice ID calculation
+  const currentActiveVoiceId = activeGender === 'male'
+    ? maleVoiceId
+    : (femaleVoiceId || maleVoiceId);
 
-  const primaryLabel = primaryVoiceInfo
-    ? `V1: ${primaryVoiceInfo.name.split(" ")[0]} (${
-        primaryVoiceInfo.gender === "male" ? "M" : "F"
-      })`
-    : "V1: Primary";
+  const maleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === maleVoiceId);
+  const femaleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === femaleVoiceId);
+  const currentVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === currentActiveVoiceId);
 
-  const secondaryLabel = secondaryVoiceInfo
-    ? `V2: ${secondaryVoiceInfo.name.split(" ")[0]} (${
-        secondaryVoiceInfo.gender === "male" ? "M" : "F"
-      })`
-    : "+ V2";
+  const maleLabel = maleVoiceInfo
+    ? `Male: ${maleVoiceInfo.name.split(' ')[0]}`
+    : 'Male';
 
+  const femaleLabel = femaleVoiceInfo
+    ? isFemaleReady
+      ? `Female: ${femaleVoiceInfo.name.split(' ')[0]}`
+      : `Download Female`
+    : '+ Add Female';
+
+    const handleSetMaleVoice = (id: string) => {
+      setMaleVoiceId(id);
+      localStorage.setItem('echoread_male_voice', id);
+    };
+  
+    const handleSetFemaleVoice = (id: string) => {
+      setFemaleVoiceId(id);
+      localStorage.setItem('echoread_female_voice', id);
+    };
+  
+    const handleToggleVoiceGender = () => {
+      if (!canToggleVoices) return;
+      setActiveGender((prev) => (prev === 'male' ? 'female' : 'male'));
+    };
   const handleDownloadVoiceId = async (id: string) => {
     setDownloadPct(0);
     await downloadVoice(setDownloadPct);
@@ -113,15 +118,15 @@ export default function App() {
     setDownloadPct(null);
   };
 
-  const handleSetPrimary = (id: string) => {
-    setPrimaryVoiceId(id);
-    localStorage.setItem("echoread_primary_voice", id);
-  };
+  // const handleSetPrimary = (id: string) => {
+  //   setPrimaryVoiceId(id);
+  //   localStorage.setItem("echoread_primary_voice", id);
+  // };
 
-  const handleSetSecondary = (id: string) => {
-    setSecondaryVoiceId(id);
-    localStorage.setItem("echoread_secondary_voice", id);
-  };
+  // const handleSetSecondary = (id: string) => {
+  //   setSecondaryVoiceId(id);
+  //   localStorage.setItem("echoread_secondary_voice", id);
+  // };
 
 
   const loadBooks = async () => {
@@ -353,7 +358,7 @@ export default function App() {
   const toggleFullscreen = async () => {
     const next = !isFullscreen;
     setIsFullscreen(next);
-  
+
     // Native Fullscreen API for PC / Mac / Android
     if (document.fullscreenEnabled) {
       try {
@@ -381,9 +386,8 @@ export default function App() {
     >
       {/* Top Navbar Section */}
       <header
-        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${
-          navbarHidden ? "hidden" : ""
-        }`}
+        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""
+          }`}
       >
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
           {/* GROUP 1: Document File + Title */}
@@ -465,6 +469,7 @@ export default function App() {
           )}
 
           {/* GROUP 3: Voice Slots, Playback & Speed Controls */}
+          {/* GROUP 3: Voice Selection, Playback & Speed Controls */}
           <div className="app-control flex flex-col md:flex-row md:items-center gap-2 px-2.5 py-2 rounded-lg w-full md:w-auto min-w-0 max-w-full">
             {!voiceReady ? (
               <button
@@ -478,56 +483,70 @@ export default function App() {
               </button>
             ) : (
               <>
-                {/* Voice Selection & Settings - Always visible */}
+                {/* Voice Selection & Settings */}
                 <div className="flex items-center gap-1.5 w-full md:w-auto min-w-0">
+                  {/* Segmented Switch: Male vs Female */}
                   <div className="flex items-center rounded-md border border-inherit bg-black/10 p-0.5 flex-1 md:flex-initial min-w-0">
+                    {/* Male Voice Button */}
                     <button
                       type="button"
-                      onClick={() => setActiveVoiceSlot("primary")}
-                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
-                        activeVoiceSlot === "primary"
-                          ? "bg-[#f5da81ef] text-black font-bold shadow-xs"
+                      disabled={!isMaleReady}
+                      onClick={() => setActiveGender("male")}
+                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none disabled:opacity-40 ${activeGender === "male"
+                          ? "bg-amber-400 text-black font-bold shadow-xs"
                           : "app-muted hover:opacity-100"
-                      }`}
+                        }`}
                     >
                       <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          activeVoiceSlot === "primary"
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeGender === "male"
                             ? "bg-black animate-pulse"
                             : "bg-transparent"
-                        }`}
+                          }`}
                       />
-                      <span className="truncate">{primaryLabel}</span>
+                      <span className="truncate">{maleLabel}</span>
                     </button>
 
+                    {/* Female Voice Button */}
                     <button
                       type="button"
                       onClick={() => {
-                        if (!secondaryVoiceId) {
+                        if (!isFemaleReady) {
                           setIsVoiceModalOpen(true);
                         } else {
-                          setActiveVoiceSlot("secondary");
+                          setActiveGender("female");
                         }
                       }}
-                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1 select-none ${
-                        activeVoiceSlot === "secondary"
-                          ? "bg-[#f5da81ef] text-black font-bold shadow-xs"
+                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none ${activeGender === "female"
+                          ? "bg-amber-400 text-black font-bold shadow-xs"
                           : "app-muted hover:opacity-100"
-                      }`}
+                        }`}
                     >
                       <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          activeVoiceSlot === "secondary"
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeGender === "female"
                             ? "bg-black animate-pulse"
                             : "bg-transparent"
-                        }`}
+                          }`}
                       />
-                      <span className="truncate">{secondaryLabel}</span>
+                      <span className="truncate">{femaleLabel}</span>
                     </button>
                   </div>
 
-               
+                  {/* Toggle Shortcut Button - Disabled if either voice isn't ready */}
+                  <button
+                    type="button"
+                    disabled={!canToggleVoices}
+                    onClick={handleToggleVoiceGender}
+                    title={
+                      canToggleVoices
+                        ? "Switch Voice"
+                        : "Download both male and female voices to toggle"
+                    }
+                    className="app-btn text-xs font-semibold px-2 py-1 rounded-md transition cursor-pointer shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    ⇄
+                  </button>
 
+                  {/* Manage Voices Modal Trigger */}
                   <button
                     type="button"
                     onClick={() => setIsVoiceModalOpen(true)}
@@ -548,9 +567,8 @@ export default function App() {
                       <button
                         onClick={handleTogglePlay}
                         disabled={!voiceReady}
-                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shrink-0 ${
-                          isPlaying ? "app-pause" : "app-play"
-                        } disabled:opacity-25`}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shrink-0 ${isPlaying ? "app-pause" : "app-play"
+                          } disabled:opacity-25`}
                       >
                         {isPlaying ? "⏸ Pause" : "▶ Play"}
                       </button>
@@ -608,9 +626,8 @@ export default function App() {
             type="button"
             onClick={handleTogglePlay}
             disabled={!activeBook || !voiceReady}
-            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${
-              isPlaying ? "app-pause" : "app-play"
-            } disabled:opacity-25`}
+            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${isPlaying ? "app-pause" : "app-play"
+              } disabled:opacity-25`}
           >
             {isPlaying ? "⏸" : "▶"}
           </button>
@@ -626,14 +643,13 @@ export default function App() {
 
       {/* Two-Column App Layout */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-      {/* PDF Reading Area */}
-      <main
+        {/* PDF Reading Area */}
+        <main
           ref={readerContainerRef}
-          className={`app-panel flex flex-col shadow-xl overflow-hidden transition-all duration-150 ${
-            isFullscreen
+          className={`app-panel flex flex-col shadow-xl overflow-hidden transition-all duration-150 ${isFullscreen
               ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
               : "lg:col-span-8 rounded-lg"
-          }`}
+            }`}
         >
           <div className="app-panel-header px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between text-xs shrink-0">
             <span className="font-semibold">
@@ -681,11 +697,10 @@ export default function App() {
                 type="button"
                 onClick={toggleFullscreen}
                 title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"}
-                className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${
-                  isFullscreen
+                className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${isFullscreen
                     ? "bg-amber-400 text-black font-bold shadow-xs"
                     : "app-btn border border-inherit"
-                }`}
+                  }`}
               >
                 <span>{isFullscreen ? "🗗" : "⛶"}</span>
                 <span className="hidden sm:inline text-[11px]">
@@ -697,9 +712,8 @@ export default function App() {
 
           {/* Reading text body */}
           <div
-            className={`px-3 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto ${
-              isFullscreen ? "h-full max-h-none" : "max-h-[75vh]"
-            }`}
+            className={`px-3 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto ${isFullscreen ? "h-full max-h-none" : "max-h-[75vh]"
+              }`}
           >
             {activeBook ? (
               <div
@@ -724,10 +738,10 @@ export default function App() {
                   const lineState = isCurrent
                     ? "is-current"
                     : isQueued
-                    ? "is-queued"
-                    : isProcessed
-                    ? "is-processed"
-                    : "is-pending";
+                      ? "is-queued"
+                      : isProcessed
+                        ? "is-processed"
+                        : "is-pending";
 
                   return (
                     <div
@@ -776,11 +790,11 @@ export default function App() {
         onClose={() => setIsVoiceModalOpen(false)}
         theme={theme}
         installedVoiceIds={installedVoiceIds}
-        primaryVoiceId={primaryVoiceId}
-        secondaryVoiceId={secondaryVoiceId}
+        maleVoiceId={maleVoiceId}
+        femaleVoiceId={femaleVoiceId}
         onDownloadVoice={handleDownloadVoiceId}
-        onSetPrimary={handleSetPrimary}
-        onSetSecondary={handleSetSecondary}
+        onSetMaleVoice={handleSetMaleVoice}
+        onSetFemaleVoice={handleSetFemaleVoice}
       />
     </div>
   );

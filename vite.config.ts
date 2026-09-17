@@ -45,19 +45,6 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: '/',
         id: '/?source=pwa',
-        share_target: {
-          action: '/share-target',
-          method: 'POST',
-          enctype: 'multipart/form-data',
-          params: {
-            files: [
-              {
-                name: 'pdf_file',
-                accept: ['application/pdf', '.pdf'],
-              },
-            ],
-          },
-        },
         icons: [
           {
             src: '/pwa-192x192.png',
