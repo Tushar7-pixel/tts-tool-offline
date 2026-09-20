@@ -99,9 +99,24 @@ function groupVisualLines(items: PdfTextItem[]): string[] {
   return lines;
 }
 
-function splitSentences(rawText: string): string[] {
-  return rawText
-    .split(/(?<=[.?!])\s+/)
+// src/utils/pdf.ts
+
+export function splitSentences(rawText: string): string[] {
+  const cleaned = rawText.replace(/\s+/g, " ").trim();
+  if (!cleaned) return [];
+
+  // Use Intl.Segmenter (supported in all modern Chromium/WebKit browsers)
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+    const segments = segmenter.segment(cleaned);
+    return Array.from(segments)
+      .map((s) => s.segment.trim())
+      .filter((s) => s.length > 0);
+  }
+
+  // Fallback regex that accounts for closing quotes, brackets, and dialogue markers
+  return cleaned
+    .split(/(?<=[.?!][\u201D\u2019"'’”\)\]]*)\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 }

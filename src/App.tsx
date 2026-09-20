@@ -1,7 +1,7 @@
 // src/App.tsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { extractPdfPages, mapDisplayToSentences } from "./utils/pdf";
-import { isVoiceInstalled, downloadVoice } from "./utils/tts";
+import { extractPdfPages,  splitSentences } from "./utils/pdf";
+import { isVoiceInstalled, downloadVoice, DEFAULT_PIPER_VOICE } from "./utils/tts";
 import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
 import { BookShelf } from "./components/BookShelf";
@@ -27,7 +27,53 @@ import {
 } from "./utils/mediaSession";
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
+import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
 
+const MemoizedReaderLine = React.memo(
+  ({
+    idx,
+    lineText,
+    lineState,
+    isFirstCurrent,
+    onLineClick,
+  }: {
+    idx: number;
+    lineText: string;
+    lineState: string;
+    isFirstCurrent: boolean;
+    onLineClick: (idx: number) => void;
+  }) => {
+    const activeRef = useRef<HTMLDivElement | null>(null);
+
+    // Scrolling logic moved directly into the memoized component
+    useEffect(() => {
+      if (isFirstCurrent && activeRef.current) {
+        activeRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    }, [isFirstCurrent]);
+
+    return (
+      <div
+        ref={isFirstCurrent ? activeRef : null}
+        onClick={() => onLineClick(idx)}
+        className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
+      >
+        {lineText.length > 0 ? lineText : <span className="block h-[1em]">&nbsp;</span>}
+      </div>
+    );
+  },
+  (prevProps, nextProps) => {
+    // CRITICAL FIX: Only re-render if the exact visual state of this specific line changes
+    return (
+      prevProps.lineState === nextProps.lineState &&
+      prevProps.isFirstCurrent === nextProps.isFirstCurrent &&
+      prevProps.lineText === nextProps.lineText
+    );
+  }
+);
 export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
@@ -40,72 +86,80 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
+  const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
 
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const activeLineRef = useRef<HTMLDivElement | null>(null);
+  // const activeLineRef = useRef<HTMLDivElement | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   // Installed models list
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('echoread_installed_voices');
-    return saved ? JSON.parse(saved) : ['en_US-hfc_male-medium'];
+    const saved = localStorage.getItem("echoread_installed_voices");
+    return saved ? JSON.parse(saved) : ["en_US-hfc_male-medium"];
   });
 
   // Male & Female Voice Configurations
   const [maleVoiceId, setMaleVoiceId] = useState<string>(() => {
-    return localStorage.getItem('echoread_male_voice') || 'en_US-hfc_male-medium';
+    return (
+      localStorage.getItem("echoread_male_voice") || "en_US-hfc_male-medium"
+    );
   });
 
   const [femaleVoiceId, setFemaleVoiceId] = useState<string | null>(() => {
-    return localStorage.getItem('echoread_female_voice') || 'en_US-hfc_female-medium';
+    return (
+      localStorage.getItem("echoread_female_voice") || "en_US-hfc_female-medium"
+    );
   });
 
   // Active Gender Slot ('male' | 'female')
-  const [activeGender, setActiveGender] = useState<'male' | 'female'>('male');
+  const [activeGender, setActiveGender] = useState<"male" | "female">("male");
 
   // Verify availability in downloaded cache
   const isMaleReady = installedVoiceIds.includes(maleVoiceId);
-  const isFemaleReady = Boolean(femaleVoiceId && installedVoiceIds.includes(femaleVoiceId));
+  const isFemaleReady = Boolean(
+    femaleVoiceId && installedVoiceIds.includes(femaleVoiceId),
+  );
   const canToggleVoices = isMaleReady && isFemaleReady;
 
   // Active Voice ID calculation
-  const currentActiveVoiceId = activeGender === 'male'
-    ? maleVoiceId
-    : (femaleVoiceId || maleVoiceId);
+  const currentActiveVoiceId =
+    activeGender === "male" ? maleVoiceId : femaleVoiceId || maleVoiceId;
 
   const maleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === maleVoiceId);
   const femaleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === femaleVoiceId);
-  const currentVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === currentActiveVoiceId);
+  const currentVoiceInfo = AVAILABLE_VOICES.find(
+    (v) => v.id === currentActiveVoiceId,
+  );
 
   const maleLabel = maleVoiceInfo
-    ? `Male: ${maleVoiceInfo.name.split(' ')[0]}`
-    : 'Male';
+    ? `Male: ${maleVoiceInfo.name.split(" ")[0]}`
+    : "Male";
 
   const femaleLabel = femaleVoiceInfo
     ? isFemaleReady
-      ? `Female: ${femaleVoiceInfo.name.split(' ')[0]}`
+      ? `Female: ${femaleVoiceInfo.name.split(" ")[0]}`
       : `Download Female`
-    : '+ Add Female';
+    : "+ Add Female";
 
-    const handleSetMaleVoice = (id: string) => {
-      setMaleVoiceId(id);
-      localStorage.setItem('echoread_male_voice', id);
-    };
-  
-    const handleSetFemaleVoice = (id: string) => {
-      setFemaleVoiceId(id);
-      localStorage.setItem('echoread_female_voice', id);
-    };
-  
-    const handleToggleVoiceGender = () => {
-      if (!canToggleVoices) return;
-      setActiveGender((prev) => (prev === 'male' ? 'female' : 'male'));
-    };
+  const handleSetMaleVoice = (id: string) => {
+    setMaleVoiceId(id);
+    localStorage.setItem("echoread_male_voice", id);
+  };
+
+  const handleSetFemaleVoice = (id: string) => {
+    setFemaleVoiceId(id);
+    localStorage.setItem("echoread_female_voice", id);
+  };
+
+  const handleToggleVoiceGender = () => {
+    if (!canToggleVoices) return;
+    setActiveGender((prev) => (prev === "male" ? "female" : "male"));
+  };
   const handleDownloadVoiceId = async (id: string) => {
     setDownloadPct(0);
-    await downloadVoice(setDownloadPct);
+    await downloadVoice(id, (pct) => setDownloadPct(pct));
     setInstalledVoiceIds((prev) => {
       const updated = Array.from(new Set([...prev, id]));
       localStorage.setItem(
@@ -128,11 +182,16 @@ export default function App() {
   //   localStorage.setItem("echoread_secondary_voice", id);
   // };
 
-
   const loadBooks = async () => {
     const list = await getAllBooks();
     setBooks(list.sort((a, b) => b.updatedAt - a.updatedAt));
   };
+
+  useEffect(() => {
+    return subscribeTtsStatus((status) => {
+      setEngineStatus(status);
+    });
+  }, []);
 
   useEffect(() => {
     const font = getReaderFont(fontId);
@@ -194,11 +253,17 @@ export default function App() {
 
   const handleInstallVoice = async () => {
     setDownloadPct(0);
-    await downloadVoice(setDownloadPct);
+    await downloadVoice(DEFAULT_PIPER_VOICE, (pct) => setDownloadPct(pct));
     setVoiceReady(true);
     setDownloadPct(null);
   };
 
+  const sanitizedPages = useMemo(() => {
+    if (!activeBook?.pages) return [];
+    return activeBook.pages.map((page) =>
+      page.flatMap((line) => splitSentences(line))
+    );
+  }, [activeBook?.pages]);
   const {
     currentPage,
     currentLine,
@@ -211,7 +276,7 @@ export default function App() {
     jumpTo,
   } = useReader(
     activeBook?.id || null,
-    activeBook?.pages || [],
+    sanitizedPages || [],
     activeBook?.currentPage || 0,
     activeBook?.currentLine || 0,
     currentActiveVoiceId,
@@ -230,12 +295,14 @@ export default function App() {
     togglePlay();
   };
 
-  useEffect(() => {
-    activeLineRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, [currentLine, currentPage]);
+  // useEffect(() => {
+  //   activeLineRef.current?.scrollIntoView({
+  //     behavior: "smooth",
+  //     block: "center",
+  //   });
+  // }, [currentLine, currentPage]);
+
+
 
   useEffect(() => {
     if (activeBook) {
@@ -243,33 +310,51 @@ export default function App() {
     }
   }, [currentPage, activeBook]);
 
-  const ttsLines = activeBook?.pages[currentPage] || [];
-  const displayedLines = activeBook?.displayPages?.[currentPage] || ttsLines;
-  const { displayToSentence } = useMemo(
-    () => mapDisplayToSentences(displayedLines, ttsLines),
-    [displayedLines, ttsLines],
-  );
-  const firstCurrentDisplayIdx = useMemo(
-    () =>
-      displayedLines.findIndex((_, i) =>
-        (displayToSentence[i] || []).includes(currentLine),
-      ),
-    [displayedLines, displayToSentence, currentLine],
-  );
+  // const ttsLines = activeBook?.pages[currentPage] || [];
+  // const displayedLines = activeBook?.displayPages?.[currentPage] || ttsLines;
+  // const totalPageLines = ttsLines.length;
+  // const processedCount = processedLines.length;
+  // const generationPct = totalPageLines > 0 
+  //   ? Math.min(100, Math.round((processedCount / totalPageLines) * 100)) 
+  //   : 0;
 
-  const handleDisplayLineClick = async (displayIdx: number) => {
-    const hits = displayToSentence[displayIdx] || [];
-    if (hits.length === 0) return;
 
+  const displayedLines = sanitizedPages[currentPage] || [];
+  const totalPageLines = displayedLines.length;
+  const processedCount = processedLines.length;
+  const generationPct = totalPageLines > 0
+    ? Math.min(100, Math.round((processedCount / totalPageLines) * 100))
+    : 0;
+
+  const handleDisplayLineClick = async (sentenceIdx: number) => {
     await ensureAudioUnlocked();
-
-    const nextOnLine = hits.find((s) => s > currentLine);
-    if (hits.includes(currentLine) && nextOnLine !== undefined) {
-      jumpTo(currentPage, nextOnLine);
-      return;
-    }
-    jumpTo(currentPage, hits[0]);
+    jumpTo(currentPage, sentenceIdx);
   };
+  // const { displayToSentence } = useMemo(
+  //   () => mapDisplayToSentences(displayedLines, ttsLines),
+  //   [displayedLines, ttsLines],
+  // );
+  // // const firstCurrentDisplayIdx = useMemo(
+  // //   () =>
+  // //     displayedLines.findIndex((_, i) =>
+  // //       (displayToSentence[i] || []).includes(currentLine),
+  // //     ),
+  // //   [displayedLines, displayToSentence, currentLine],
+  // // );
+
+  // const handleDisplayLineClick = async (displayIdx: number) => {
+  //   const hits = displayToSentence[displayIdx] || [];
+  //   if (hits.length === 0) return;
+
+  //   await ensureAudioUnlocked();
+
+  //   const nextOnLine = hits.find((s) => s > currentLine);
+  //   if (hits.includes(currentLine) && nextOnLine !== undefined) {
+  //     jumpTo(currentPage, nextOnLine);
+  //     return;
+  //   }
+  //   jumpTo(currentPage, hits[0]);
+  // };
 
   const readerFont = getReaderFont(fontId);
 
@@ -376,8 +461,9 @@ export default function App() {
     const handleFsChange = () => {
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
-    document.addEventListener('fullscreenchange', handleFsChange);
-    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
   return (
     <div
@@ -458,7 +544,10 @@ export default function App() {
                 type="button"
                 disabled={currentPage >= activeBook.totalPages - 1}
                 onClick={() =>
-                  jumpTo(Math.min(activeBook.totalPages - 1, currentPage + 1), 0)
+                  jumpTo(
+                    Math.min(activeBook.totalPages - 1, currentPage + 1),
+                    0,
+                  )
                 }
                 className="px-2 py-1 text-xs app-muted hover:opacity-80 disabled:opacity-20 cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1"
               >
@@ -618,6 +707,7 @@ export default function App() {
             />
           </div>
         </div>
+        {/* Dynamic TTS Status Bar */}
       </header>
 
       {navbarHidden && compactChrome && (
@@ -691,12 +781,44 @@ export default function App() {
               <span className="hidden sm:inline app-muted">
                 {displayedLines.length} lines
               </span>
+              {engineStatus !== "idle" && (
+                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center bg-amber-50 z-10">
+                  <div className="w-full h-[24px] border-t border-amber-400/30 flex items-center justify-between px-3 relative overflow-hidden shadow-inner">
+                    <span className="text-[10px] font-bold text-amber-700 tracking-wide z-10 flex items-center gap-1.5 drop-shadow-sm">
+                      {engineStatus === "loading_voice" ? (
+                        <>
+                          <span className="animate-spin inline-block">⚙️</span>
+                          Loading Model into Memory...
+                        </>
+                      ) : (
+                        <>
+                          <span className="animate-pulse inline-block">⚡</span>
+                          Synthesizing Page Audio ({generationPct}%)
+                        </>
+                      )}
+                    </span>
 
+                    {/* Progress Indicator */}
+                    <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-amber-200/50">
+                      {engineStatus === "loading_voice" ? (
+                        <div className="h-full bg-amber-500 w-1/3 rounded-full animate-[slideRight_1.5s_ease-in-out_infinite]" />
+                      ) : (
+                        <div
+                          className="h-full bg-amber-500 transition-all duration-300 ease-out"
+                          style={{ width: `${generationPct}%` }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Fullscreen Toggle Button */}
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                title={isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"}
+                title={
+                  isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
+                }
                 className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${isFullscreen
                     ? "bg-amber-400 text-black font-bold shadow-xs"
                     : "app-btn border border-inherit"
@@ -716,49 +838,39 @@ export default function App() {
               }`}
           >
             {activeBook ? (
-              <div
-                className="text-left max-w-3xl mx-auto"
-                style={{
-                  fontFamily: readerFont.cssFamily,
-                  fontSize: `${fontSize}px`,
-                  lineHeight: 1.7,
-                }}
-              >
-                {displayedLines.map((line, idx) => {
-                  const sentenceHits = displayToSentence[idx] || [];
-                  const isCurrent = sentenceHits.includes(currentLine);
-                  const isQueued =
-                    !isCurrent &&
-                    sentenceHits.some((s) => queuedLines.includes(s));
-                  const isProcessed =
-                    !isCurrent &&
-                    !isQueued &&
-                    sentenceHits.some((s) => processedLines.includes(s));
-                  const isFirstCurrent = idx === firstCurrentDisplayIdx;
-                  const lineState = isCurrent
-                    ? "is-current"
-                    : isQueued
-                      ? "is-queued"
-                      : isProcessed
-                        ? "is-processed"
-                        : "is-pending";
-
-                  return (
-                    <div
-                      key={idx}
-                      ref={isFirstCurrent ? activeLineRef : null}
-                      onClick={() => handleDisplayLineClick(idx)}
-                      className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
-                    >
-                      {line.length > 0 ? (
-                        line
-                      ) : (
-                        <span className="block h-[1em]">&nbsp;</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+            <div
+            className="text-left max-w-3xl mx-auto space-y-2"
+            style={{
+              fontFamily: readerFont.cssFamily,
+              fontSize: `${fontSize}px`,
+              lineHeight: 1.7,
+            }}
+          >
+            {displayedLines.map((line, idx) => {
+              const isCurrent = idx === currentLine;
+              const isQueued = !isCurrent && queuedLines.includes(idx);
+              const isProcessed = !isCurrent && !isQueued && processedLines.includes(idx);
+        
+              const lineState = isCurrent
+                ? "is-current"
+                : isQueued
+                  ? "is-queued"
+                  : isProcessed
+                    ? "is-processed"
+                    : "is-pending";
+        
+              return (
+                <MemoizedReaderLine
+                  key={idx}
+                  idx={idx}
+                  lineText={line}
+                  lineState={lineState}
+                  isFirstCurrent={isCurrent}
+                  onLineClick={handleDisplayLineClick}
+                />
+              );
+            })}
+          </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center app-muted text-sm space-y-2">
                 <span className="text-2xl">📄</span>

@@ -1,38 +1,24 @@
 // src/hooks/useReader.ts
-import { useState, useRef, useEffect } from "react";
-import { synthesize } from "../utils/tts";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { synthesize, cancelPendingSynthesis, clearTTSQueue } from "../utils/tts";
 import { updateBookProgress } from "../utils/db";
 
-const PREFETCH_AHEAD = 3;
-
 type LinePos = { pageIdx: number; lineIdx: number; text: string };
+type CacheKeyData = { voiceId: string; pageIdx: number; lineIdx: number };
+
+const PREFETCH_LINES = 12;
 
 function posKey(pageIdx: number, lineIdx: number, voiceId?: string) {
-  return `${voiceId || "default"}:${pageIdx}:${lineIdx}`;
+  return JSON.stringify([voiceId || "default", pageIdx, lineIdx]);
 }
 
-function collectLines(
-  pages: string[][],
-  pageIdx: number,
-  lineIdx: number,
-  count: number,
-): LinePos[] {
-  const result: LinePos[] = [];
-  let p = pageIdx;
-  let l = lineIdx;
-
-  while (result.length < count && p < pages.length) {
-    const page = pages[p];
-    if (!page || l >= page.length) {
-      p += 1;
-      l = 0;
-      continue;
-    }
-    result.push({ pageIdx: p, lineIdx: l, text: page[l] });
-    l += 1;
+function parseCacheKey(key: string): CacheKeyData | null {
+  try {
+    const [voiceId, pageIdx, lineIdx] = JSON.parse(key);
+    return { voiceId, pageIdx, lineIdx };
+  } catch {
+    return null;
   }
-
-  return result;
 }
 
 export function useReader(
@@ -52,20 +38,23 @@ export function useReader(
   const audioRef = useRef<HTMLAudioElement | null>(new Audio());
   const speedRef = useRef<number>(1.0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
   const sessionRef = useRef(0);
   const pagesRef = useRef(pages);
   const bookIdRef = useRef(bookId);
   const currentPageRef = useRef(initialPage);
+  const currentLineRef = useRef(initialLine);
   const voiceIdRef = useRef(voiceId);
   const isPlayingRef = useRef(false);
-  const blobCacheRef = useRef(new Map<string, Blob>());
-  const inflightRef = useRef(new Map<string, Promise<Blob>>());
-  const synthChainRef = useRef(Promise.resolve<void>(undefined));
+
+  const blobCacheRef = useRef<Map<string, Blob>>(new Map());
+  const inflightRef = useRef<Map<string, Promise<Blob | null>>>(new Map());
   const objectUrlRef = useRef<string | null>(null);
+
+  const prefetchSessionRef = useRef<{ session: number; page: number; startLine: number } | null>(null);
 
   pagesRef.current = pages;
   bookIdRef.current = bookId;
-  voiceIdRef.current = voiceId;
 
   useEffect(() => {
     speedRef.current = speed;
@@ -78,272 +67,350 @@ export function useReader(
     setCurrentPage(initialPage);
     setCurrentLine(initialLine);
     currentPageRef.current = initialPage;
+    currentLineRef.current = initialLine;
   }, [bookId, initialPage, initialLine]);
 
-  // Reset audio cache and restart stream if the voice changes mid-read
-  useEffect(() => {
-    if (voiceIdRef.current === voiceId) return;
-    voiceIdRef.current = voiceId;
-
-    const wasPlaying = isPlayingRef.current;
-    sessionRef.current += 1;
-    if (audioRef.current) {
-      audioRef.current.onended = null;
-      audioRef.current.pause();
-    }
+  const revokeObjectUrl = useCallback(() => {
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
       objectUrlRef.current = null;
     }
-    blobCacheRef.current.clear();
-    inflightRef.current.clear();
-    setQueuedLines([]);
-    setProcessedLines([]);
+  }, []);
 
-    if (wasPlaying) {
-      isPlayingRef.current = true;
-      setIsPlaying(true);
-      playLineAt(currentPageRef.current, currentLine);
-    }
-  }, [voiceId, currentLine]);
-
-  useEffect(() => {
-    sessionRef.current += 1;
-    if (audioRef.current) {
-      audioRef.current.onended = null;
-      audioRef.current.pause();
-    }
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-    blobCacheRef.current.clear();
-    inflightRef.current.clear();
-    isPlayingRef.current = false;
-    setIsPlaying(false);
-    setQueuedLines([]);
-    setProcessedLines([]);
-  }, [bookId]);
-
-  const requestWakeLock = async () => {
-    if ("wakeLock" in navigator && !wakeLockRef.current) {
-      try {
-        wakeLockRef.current = await navigator.wakeLock.request("screen");
-      } catch (e) {
-        console.warn("Wake Lock request failed:", e);
-      }
-    }
-  };
-
-  const releaseWakeLock = async () => {
-    if (wakeLockRef.current) {
-      await wakeLockRef.current.release();
-      wakeLockRef.current = null;
-    }
-  };
-
-  const revokeObjectUrl = () => {
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = null;
-    }
-  };
-
-  const processedForPage = (pageIdx: number) => {
+  const processedForPage = useCallback((pageIdx: number) => {
     const lines: number[] = [];
+    const activeVoice = voiceIdRef.current || "default";
+
     for (const key of blobCacheRef.current.keys()) {
-      const parts = key.split(":");
-      const p = Number(parts[1]);
-      const l = Number(parts[2]);
-      if (p === pageIdx) lines.push(l);
+      const parsed = parseCacheKey(key);
+      if (!parsed) continue;
+
+      if (parsed.voiceId === activeVoice && parsed.pageIdx === pageIdx) {
+        lines.push(parsed.lineIdx);
+      }
     }
     lines.sort((a, b) => a - b);
     return lines;
-  };
+  }, []);
 
-  const publishProcessed = (pageIdx: number) => {
+  const publishProcessed = useCallback((pageIdx: number) => {
     setProcessedLines(processedForPage(pageIdx));
-  };
+  }, [processedForPage]);
 
-  const pruneCacheToPage = (pageIdx: number) => {
+  const pruneCacheToPage = useCallback((pageIdx: number) => {
     for (const key of [...blobCacheRef.current.keys()]) {
-      const parts = key.split(":");
-      const p = Number(parts[1]);
-      if (p !== pageIdx) blobCacheRef.current.delete(key);
+      const parsed = parseCacheKey(key);
+      if (!parsed) {
+        blobCacheRef.current.delete(key);
+        continue;
+      }
+      if (parsed.pageIdx !== pageIdx) {
+        blobCacheRef.current.delete(key);
+      }
     }
     publishProcessed(pageIdx);
-  };
+  }, [publishProcessed]);
 
-  const goToPage = (pageIdx: number, lineIdx: number) => {
+  const goToPage = useCallback((pageIdx: number, lineIdx: number) => {
     currentPageRef.current = pageIdx;
+    currentLineRef.current = lineIdx;
     pruneCacheToPage(pageIdx);
     setCurrentPage(pageIdx);
     setCurrentLine(lineIdx);
-  };
+  }, [pruneCacheToPage]);
 
-  const stopSession = () => {
+  const stopSession = useCallback(() => {
     sessionRef.current += 1;
+    prefetchSessionRef.current = null;
+
     if (audioRef.current) {
       audioRef.current.onended = null;
       audioRef.current.pause();
     }
     revokeObjectUrl();
     setQueuedLines([]);
-  };
+    
+    // Instantly drops stale prefetch lines allowing the worker to grab new page jobs
+    clearTTSQueue();
+  }, [revokeObjectUrl]);
 
-  const synthesizeSerialized = (text: string) => {
-    const run = synthChainRef.current.then(() => synthesize(text));
-    synthChainRef.current = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  };
+  const requestWakeLock = useCallback(async () => {
+    if ("wakeLock" in navigator && !wakeLockRef.current) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      } catch (error) {
+        console.warn("Wake Lock request failed:", error);
+      }
+    }
+  }, []);
 
-  const getBlob = (pos: LinePos, session: number): Promise<Blob | null> => {
+  const releaseWakeLock = useCallback(async () => {
+    if (wakeLockRef.current) {
+      await wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  const getBlob = useCallback((pos: LinePos, session: number): Promise<Blob | null> => {
     const key = posKey(pos.pageIdx, pos.lineIdx, voiceIdRef.current);
     const cached = blobCacheRef.current.get(key);
-    if (cached) return Promise.resolve(cached);
 
-    let pending = inflightRef.current.get(key);
-    if (!pending) {
-      pending = synthesizeSerialized(pos.text).then(
-        (blob) => {
+    if (cached) return Promise.resolve(cached);
+    const existing = inflightRef.current.get(key);
+    if (existing) return existing;
+
+    const request = synthesize(pos.text, voiceIdRef.current)
+      .then((blob) => {
+        if (session !== sessionRef.current) return null;
+        const keepPage = currentPageRef.current;
+
+        if (pos.pageIdx === keepPage || pos.pageIdx === keepPage + 1) {
+          blobCacheRef.current.set(key, blob);
+          publishProcessed(keepPage);
+        }
+        return blob;
+      })
+      .catch((error) => {
+        if (session === sessionRef.current) {
+          console.error("TTS synthesis failed:", error);
+        }
+        return null;
+      })
+      .finally(() => {
+        const current = inflightRef.current.get(key);
+        if (current === request) {
           inflightRef.current.delete(key);
-          const keepPage = currentPageRef.current;
-          if (pos.pageIdx === keepPage || pos.pageIdx === keepPage + 1) {
-            blobCacheRef.current.set(key, blob);
-            publishProcessed(keepPage);
-          }
-          return blob;
-        },
-        (err) => {
-          inflightRef.current.delete(key);
-          throw err;
-        },
-      );
-      inflightRef.current.set(key, pending);
+        }
+      });
+
+    inflightRef.current.set(key, request);
+    return request;
+  }, [publishProcessed]);
+
+  const startBackgroundProcessing = useCallback((pageIdx: number, startLineIdx: number, session: number) => {
+    const previous = prefetchSessionRef.current;
+    if (previous?.session === session && previous.page === pageIdx && previous.startLine === startLineIdx) {
+      return;
     }
 
-    return pending.then((blob) => {
-      if (session !== sessionRef.current) return null;
-      return blobCacheRef.current.get(key) ?? blob;
-    });
-  };
+    prefetchSessionRef.current = { session, page: pageIdx, startLine: startLineIdx };
+    const pageLines = pagesRef.current[pageIdx];
+    if (!pageLines) return;
 
-  const updateQueuedUi = (upcoming: LinePos[], pageIdx: number) => {
-    setQueuedLines(
-      upcoming
-        .filter((pos) => pos.pageIdx === pageIdx)
-        .map((pos) => pos.lineIdx),
-    );
-  };
+    const endLine = Math.min(pageLines.length, startLineIdx + PREFETCH_LINES);
+    const positions: LinePos[] = [];
 
-  const prefetchAhead = (pageIdx: number, lineIdx: number, session: number) => {
-    const window = collectLines(
-      pagesRef.current,
-      pageIdx,
-      lineIdx,
-      PREFETCH_AHEAD + 1,
-    );
-    updateQueuedUi(window.slice(1), pageIdx);
+    for (let lineIdx = startLineIdx; lineIdx < endLine; lineIdx++) {
+      positions.push({ pageIdx, lineIdx, text: pageLines[lineIdx] });
+    }
 
-    void (async () => {
-      for (const pos of window) {
+    const pendingLineNumbers = positions
+      .map((pos) => pos.lineIdx)
+      .filter((lineIdx) => {
+        const key = posKey(pageIdx, lineIdx, voiceIdRef.current);
+        return !blobCacheRef.current.has(key);
+      });
+
+    setQueuedLines(pendingLineNumbers.filter((lineIdx) => lineIdx !== startLineIdx));
+
+    for (const pos of positions) {
+      void getBlob(pos, session).then(() => {
         if (session !== sessionRef.current) return;
-        await getBlob(pos, session);
-      }
-    })();
-  };
+        setQueuedLines((previousLines) => previousLines.filter((line) => line !== pos.lineIdx));
+      });
+    }
+  }, [getBlob]);
 
-  const finishPlayback = async () => {
+  const finishPlayback = useCallback(async () => {
     isPlayingRef.current = false;
     setIsPlaying(false);
     setQueuedLines([]);
+    prefetchSessionRef.current = null;
     await releaseWakeLock();
-  };
+  }, [releaseWakeLock]);
 
-  const playLineAt = async (pageIdx: number, lineIdx: number) => {
-    const session = sessionRef.current;
-    const bookPages = pagesRef.current;
+  const playLineAt = useCallback(
+    async (pageIdx: number, lineIdx: number) => {
+      const session = sessionRef.current;
+      const bookPages = pagesRef.current;
 
-    if (pageIdx >= bookPages.length) {
-      await finishPlayback();
-      return;
-    }
-
-    const pageLines = bookPages[pageIdx];
-    if (lineIdx >= pageLines.length) {
-      const nextPage = pageIdx + 1;
-      if (nextPage < bookPages.length) {
-        goToPage(nextPage, 0);
-        const id = bookIdRef.current;
-        if (id) updateBookProgress(id, nextPage, 0);
-        await playLineAt(nextPage, 0);
-      } else {
+      if (pageIdx >= bookPages.length) {
         await finishPlayback();
-      }
-      return;
-    }
-
-    try {
-      prefetchAhead(pageIdx, lineIdx, session);
-
-      const blob = await getBlob(
-        { pageIdx, lineIdx, text: pageLines[lineIdx] },
-        session,
-      );
-
-      if (!blob || session !== sessionRef.current || !isPlayingRef.current) {
         return;
       }
 
-      const url = URL.createObjectURL(blob);
-      revokeObjectUrl();
-      objectUrlRef.current = url;
+      const pageLines = bookPages[pageIdx];
 
-      if (!audioRef.current) return;
+      if (!pageLines || lineIdx >= pageLines.length) {
+        const nextPage = pageIdx + 1;
 
-      audioRef.current.src = url;
-      audioRef.current.playbackRate = speedRef.current;
+        if (nextPage < bookPages.length) {
+          goToPage(nextPage, 0);
+          const id = bookIdRef.current;
 
-      audioRef.current.onended = () => {
-        if (session !== sessionRef.current || !isPlayingRef.current) return;
+          if (id) {
+            updateBookProgress(id, nextPage, 0);
+          }
+
+          startBackgroundProcessing(nextPage, 0, session);
+          await playLineAt(nextPage, 0);
+        } else {
+          await finishPlayback();
+        }
+        return;
+      }
+
+      try {
+        startBackgroundProcessing(pageIdx, lineIdx, session);
+
+        const blob = await getBlob(
+          {
+            pageIdx,
+            lineIdx,
+            text: pageLines[lineIdx],
+          },
+          session,
+        );
+
+        if (session !== sessionRef.current || !isPlayingRef.current) {
+          return;
+        }
+
+        // CRITICAL FIX: If blob generation fails entirely, skip to next line gracefully
+        if (!blob) {
+          console.warn(`Skipped line ${lineIdx} due to synthesis failure.`);
+          const nextLine = lineIdx + 1;
+          currentLineRef.current = nextLine;
+          setCurrentLine(nextLine);
+          if (bookIdRef.current) {
+             updateBookProgress(bookIdRef.current, pageIdx, nextLine);
+          }
+          void playLineAt(pageIdx, nextLine);
+          return;
+        }
+
+        const url = URL.createObjectURL(blob);
         revokeObjectUrl();
-        const nextLine = lineIdx + 1;
-        setCurrentLine(nextLine);
-        const id = bookIdRef.current;
-        if (id) updateBookProgress(id, pageIdx, nextLine);
-        playLineAt(pageIdx, nextLine);
-      };
+        objectUrlRef.current = url;
 
-      await audioRef.current.play();
-    } catch (err) {
-      if (session !== sessionRef.current) return;
-      console.error("Audio playback error:", err);
-      await finishPlayback();
+        if (!audioRef.current) {
+          return;
+        }
+
+        audioRef.current.src = url;
+        audioRef.current.playbackRate = speedRef.current;
+
+        audioRef.current.onended = () => {
+          if (session !== sessionRef.current || !isPlayingRef.current) {
+            return;
+          }
+
+          revokeObjectUrl();
+          const nextLine = lineIdx + 1;
+          currentLineRef.current = nextLine;
+          setCurrentLine(nextLine);
+
+          const id = bookIdRef.current;
+          if (id) {
+            updateBookProgress(id, pageIdx, nextLine);
+          }
+
+          void playLineAt(pageIdx, nextLine);
+        };
+
+        await audioRef.current.play();
+      } catch (error) {
+        if (session !== sessionRef.current) {
+          return;
+        }
+        console.error("Audio playback error:", error);
+        await finishPlayback();
+      }
+    },
+    [
+      finishPlayback,
+      getBlob,
+      goToPage,
+      revokeObjectUrl,
+      startBackgroundProcessing,
+    ],
+  );
+  useEffect(() => {
+    if (voiceIdRef.current === voiceId) return;
+
+    const wasPlaying = isPlayingRef.current;
+    voiceIdRef.current = voiceId;
+    sessionRef.current += 1;
+    const newSession = sessionRef.current;
+    prefetchSessionRef.current = null;
+
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.pause();
     }
-  };
 
-  const togglePlay = async () => {
+    revokeObjectUrl();
+    blobCacheRef.current.clear();
+    inflightRef.current.clear();
+    setQueuedLines([]);
+    setProcessedLines([]);
+
+    cancelPendingSynthesis();
+    startBackgroundProcessing(currentPageRef.current, currentLineRef.current, newSession);
+
+    if (wasPlaying) {
+      isPlayingRef.current = true;
+      setIsPlaying(true);
+      void playLineAt(currentPageRef.current, currentLineRef.current);
+    }
+    
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceId]); 
+
+  useEffect(() => {
+    sessionRef.current += 1;
+    prefetchSessionRef.current = null;
+    
+    if (audioRef.current) {
+      audioRef.current.onended = null;
+      audioRef.current.pause();
+    }
+    revokeObjectUrl();
+    blobCacheRef.current.clear();
+    inflightRef.current.clear();
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    setQueuedLines([]);
+    setProcessedLines([]);
+  }, [bookId, revokeObjectUrl]);
+
+  const togglePlay = useCallback(async () => {
     if (isPlayingRef.current) {
       stopSession();
       isPlayingRef.current = false;
       setIsPlaying(false);
       await releaseWakeLock();
-    } else {
-      isPlayingRef.current = true;
-      setIsPlaying(true);
-      await requestWakeLock();
-      playLineAt(currentPage, currentLine);
+      return;
     }
-  };
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+    await requestWakeLock();
+    void playLineAt(currentPageRef.current, currentLineRef.current);
+  }, [playLineAt, releaseWakeLock, requestWakeLock, stopSession]);
 
-  const jumpTo = (pageIdx: number, lineIdx: number = 0) => {
+  const jumpTo = useCallback((pageIdx: number, lineIdx: number = 0) => {
     const wasPlaying = isPlayingRef.current;
+    
+    // 1. Calculate page change BEFORE refs are mutated
     const pageChanged = pageIdx !== currentPageRef.current;
+    
     stopSession();
 
+    // 2. Safely mutate refs
+    currentPageRef.current = pageIdx;
+    currentLineRef.current = lineIdx;
+
+    // 3. Route interface updates accurately 
     if (pageChanged) {
       goToPage(pageIdx, lineIdx);
     } else {
@@ -352,12 +419,18 @@ export function useReader(
 
     const id = bookIdRef.current;
     if (id) updateBookProgress(id, pageIdx, lineIdx);
+
+    sessionRef.current += 1;
+    const session = sessionRef.current;
+    
+    startBackgroundProcessing(pageIdx, lineIdx, session);
+
     if (wasPlaying) {
       isPlayingRef.current = true;
       setIsPlaying(true);
-      playLineAt(pageIdx, lineIdx);
+      void playLineAt(pageIdx, lineIdx);
     }
-  };
+  }, [goToPage, playLineAt, startBackgroundProcessing, stopSession]);
 
   return {
     currentPage,
