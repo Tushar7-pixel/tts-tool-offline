@@ -102,23 +102,72 @@ function groupVisualLines(items: PdfTextItem[]): string[] {
 // src/utils/pdf.ts
 
 export function splitSentences(rawText: string): string[] {
-  const cleaned = rawText.replace(/\s+/g, " ").trim();
+  // Normalize spacing and fix spaced ellipses (e.g., ". . .")
+  const cleaned = rawText
+    .replace(/(?:\.\s*){2,}\./g, "...")
+    .replace(/\s+/g, " ")
+    .trim();
+
   if (!cleaned) return [];
 
-  // Use Intl.Segmenter (supported in all modern Chromium/WebKit browsers)
+  let rawSegments: string[] = [];
+
+  // 1. Extract raw sentences natively
   if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
     const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
-    const segments = segmenter.segment(cleaned);
-    return Array.from(segments)
+    rawSegments = Array.from(segmenter.segment(cleaned))
       .map((s) => s.segment.trim())
+      .filter((s) => s.length > 0);
+  } else {
+    rawSegments = cleaned
+      .split(/(?<=(?<!\.)[.?!][\u201D\u2019"'’”\)\]]*)\s+(?=[A-Z"'\u201C\u2018])/)
+      .map((s) => s.trim())
       .filter((s) => s.length > 0);
   }
 
-  // Fallback regex that accounts for closing quotes, brackets, and dialogue markers
-  return cleaned
-    .split(/(?<=[.?!][\u201D\u2019"'’”\)\]]*)\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+  const finalChunks: string[] = [];
+  let currentChunk = "";
+
+  // Helper to detect if a boundary represents a change in speaker/paragraph
+  const isSpeakerBoundary = (a: string, b: string) => {
+    // True if chunk A ends with punctuation/quote AND chunk B starts with a quote
+    const aEndsWithPunctOrQuote = /[.?!"'”’]$/.test(a.trim());
+    const bStartsWithQuote = /^["'“‘]/.test(b.trim());
+    return aEndsWithPunctOrQuote && bStartsWithQuote;
+  };
+
+  // 2. Smart Merging Pass
+  for (const seg of rawSegments) {
+    if (!currentChunk) {
+      currentChunk = seg;
+      continue;
+    }
+
+    const boundary = isSpeakerBoundary(currentChunk, seg);
+
+    // If it's a hard dialogue switch, NEVER merge them 
+    if (boundary) {
+      finalChunks.push(currentChunk);
+      currentChunk = seg;
+      continue;
+    }
+
+    // Merge if:
+    // 1. The combined chunk is short enough for comfortable reading (~120 chars)
+    // 2. OR the new segment is a micro-sentence so it doesn't get orphaned
+    if (currentChunk.length + seg.length < 120 || seg.length < 15) {
+      currentChunk += " " + seg;
+    } else {
+      finalChunks.push(currentChunk);
+      currentChunk = seg;
+    }
+  }
+
+  if (currentChunk) {
+    finalChunks.push(currentChunk);
+  }
+
+  return finalChunks;
 }
 
 function rangesOverlap(

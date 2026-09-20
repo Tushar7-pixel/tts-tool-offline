@@ -1,6 +1,6 @@
 // src/App.tsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { extractPdfPages,  splitSentences } from "./utils/pdf";
+import { extractPdfPages, mapDisplayToSentences } from "./utils/pdf";
 import { isVoiceInstalled, downloadVoice, DEFAULT_PIPER_VOICE } from "./utils/tts";
 import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
@@ -258,10 +258,11 @@ export default function App() {
     setDownloadPct(null);
   };
 
-  const sanitizedPages = useMemo(() => {
+  const ttsPages = useMemo(() => {
     if (!activeBook?.pages) return [];
+
     return activeBook.pages.map((page) =>
-      page.flatMap((line) => splitSentences(line))
+      page.filter((line) => line.trim().length > 0)
     );
   }, [activeBook?.pages]);
   const {
@@ -276,7 +277,7 @@ export default function App() {
     jumpTo,
   } = useReader(
     activeBook?.id || null,
-    sanitizedPages || [],
+    ttsPages || [],
     activeBook?.currentPage || 0,
     activeBook?.currentLine || 0,
     currentActiveVoiceId,
@@ -318,17 +319,29 @@ export default function App() {
   //   ? Math.min(100, Math.round((processedCount / totalPageLines) * 100)) 
   //   : 0;
 
+  const ttsLines = ttsPages[currentPage] || [];
 
-  const displayedLines = sanitizedPages[currentPage] || [];
+  const displayedLines =
+    activeBook?.displayPages?.[currentPage] || [];
   const totalPageLines = displayedLines.length;
   const processedCount = processedLines.length;
   const generationPct = totalPageLines > 0
     ? Math.min(100, Math.round((processedCount / totalPageLines) * 100))
     : 0;
 
-  const handleDisplayLineClick = async (sentenceIdx: number) => {
+  const { displayToSentence,  } = useMemo(
+    () => mapDisplayToSentences(displayedLines, ttsLines),
+    [displayedLines, ttsLines],
+  );
+
+  const handleDisplayLineClick = async (displayIdx: number) => {
+    const sentenceIndices = displayToSentence[displayIdx] || [];
+
+    if (sentenceIndices.length === 0) return;
+
     await ensureAudioUnlocked();
-    jumpTo(currentPage, sentenceIdx);
+
+    jumpTo(currentPage, sentenceIndices[0]);
   };
   // const { displayToSentence } = useMemo(
   //   () => mapDisplayToSentences(displayedLines, ttsLines),
@@ -582,14 +595,14 @@ export default function App() {
                       disabled={!isMaleReady}
                       onClick={() => setActiveGender("male")}
                       className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none disabled:opacity-40 ${activeGender === "male"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
-                          : "app-muted hover:opacity-100"
+                        ? "bg-amber-400 text-black font-bold shadow-xs"
+                        : "app-muted hover:opacity-100"
                         }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeGender === "male"
-                            ? "bg-black animate-pulse"
-                            : "bg-transparent"
+                          ? "bg-black animate-pulse"
+                          : "bg-transparent"
                           }`}
                       />
                       <span className="truncate">{maleLabel}</span>
@@ -606,14 +619,14 @@ export default function App() {
                         }
                       }}
                       className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none ${activeGender === "female"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
-                          : "app-muted hover:opacity-100"
+                        ? "bg-amber-400 text-black font-bold shadow-xs"
+                        : "app-muted hover:opacity-100"
                         }`}
                     >
                       <span
                         className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeGender === "female"
-                            ? "bg-black animate-pulse"
-                            : "bg-transparent"
+                          ? "bg-black animate-pulse"
+                          : "bg-transparent"
                           }`}
                       />
                       <span className="truncate">{femaleLabel}</span>
@@ -737,8 +750,8 @@ export default function App() {
         <main
           ref={readerContainerRef}
           className={`app-panel flex flex-col shadow-xl overflow-hidden transition-all duration-150 ${isFullscreen
-              ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
-              : "lg:col-span-8 rounded-lg"
+            ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
+            : "lg:col-span-8 rounded-lg"
             }`}
         >
           <div className="app-panel-header px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between text-xs shrink-0">
@@ -820,8 +833,8 @@ export default function App() {
                   isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
                 }
                 className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${isFullscreen
-                    ? "bg-amber-400 text-black font-bold shadow-xs"
-                    : "app-btn border border-inherit"
+                  ? "bg-amber-400 text-black font-bold shadow-xs"
+                  : "app-btn border border-inherit"
                   }`}
               >
                 <span>{isFullscreen ? "🗗" : "⛶"}</span>
@@ -838,39 +851,53 @@ export default function App() {
               }`}
           >
             {activeBook ? (
-            <div
-            className="text-left max-w-3xl mx-auto space-y-2"
-            style={{
-              fontFamily: readerFont.cssFamily,
-              fontSize: `${fontSize}px`,
-              lineHeight: 1.7,
-            }}
-          >
-            {displayedLines.map((line, idx) => {
-              const isCurrent = idx === currentLine;
-              const isQueued = !isCurrent && queuedLines.includes(idx);
-              const isProcessed = !isCurrent && !isQueued && processedLines.includes(idx);
-        
-              const lineState = isCurrent
-                ? "is-current"
-                : isQueued
-                  ? "is-queued"
-                  : isProcessed
-                    ? "is-processed"
-                    : "is-pending";
-        
-              return (
-                <MemoizedReaderLine
-                  key={idx}
-                  idx={idx}
-                  lineText={line}
-                  lineState={lineState}
-                  isFirstCurrent={isCurrent}
-                  onLineClick={handleDisplayLineClick}
-                />
-              );
-            })}
-          </div>
+              <div
+                className="text-left max-w-3xl mx-auto space-y-2"
+                style={{
+                  fontFamily: readerFont.cssFamily,
+                  fontSize: `${fontSize}px`,
+                  lineHeight: 1.7,
+                }}
+              >
+                {displayedLines.map((line, idx) => {
+                  const sentenceIndices = displayToSentence[idx] || [];
+
+                  const isCurrent = sentenceIndices.includes(currentLine);
+
+                  const isQueued =
+                    !isCurrent &&
+                    sentenceIndices.some((sentenceIdx) =>
+                      queuedLines.includes(sentenceIdx)
+                    );
+
+                  const isProcessed =
+                    !isCurrent &&
+                    !isQueued &&
+                    sentenceIndices.length > 0 &&
+                    sentenceIndices.every((sentenceIdx) =>
+                      processedLines.includes(sentenceIdx)
+                    );
+
+                  const lineState = isCurrent
+                    ? "is-current"
+                    : isQueued
+                      ? "is-queued"
+                      : isProcessed
+                        ? "is-processed"
+                        : "is-pending";
+
+                  return (
+                    <MemoizedReaderLine
+                      key={idx}
+                      idx={idx}
+                      lineText={line}
+                      lineState={lineState}
+                      isFirstCurrent={isCurrent}
+                      onLineClick={handleDisplayLineClick}
+                    />
+                  );
+                })}
+              </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center app-muted text-sm space-y-2">
                 <span className="text-2xl">📄</span>
