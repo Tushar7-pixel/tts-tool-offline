@@ -19,7 +19,7 @@ export function subscribeTtsStatus(cb: (status: TtsEngineStatus) => void) {
 
 // CRITICAL FIX: Limit outer worker to 1. 
 // ONNX handles internal multithreading. Multiple outer workers duplicate model RAM.
-const WORKER_COUNT = 2;
+const WORKER_COUNT = 1;
 
 type PendingJob = {
   id: number;

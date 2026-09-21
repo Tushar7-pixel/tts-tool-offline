@@ -6,7 +6,7 @@ import { updateBookProgress } from "../utils/db";
 type LinePos = { pageIdx: number; lineIdx: number; text: string };
 type CacheKeyData = { voiceId: string; pageIdx: number; lineIdx: number };
 
-const PREFETCH_LINES = 12;
+const PREFETCH_LINES = 5;
 
 function posKey(pageIdx: number, lineIdx: number, voiceId?: string) {
   return JSON.stringify([voiceId || "default", pageIdx, lineIdx]);
