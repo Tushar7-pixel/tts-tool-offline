@@ -900,39 +900,38 @@ export default function App() {
             : "lg:col-span-8 rounded-lg"
             }`}
         >
-          <div className="app-panel-header px-4 sm:px-5 py-2.5 sm:py-3 flex items-center justify-between text-xs shrink-0">
-            <span className="font-semibold">
-              {activeBook
-                ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
-                : "Document View"}
-            </span>
+         <div className="app-panel-header px-3 sm:px-5 py-2.5 flex items-center justify-between text-xs shrink-0 gap-3 overflow-hidden">
+            
+            {/* LEFT SIDE: Chapters Button & Title Tracker */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {/* Chapter Drawer Toggle */}
+              {activeBook?.chapters && activeBook.chapters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsChapterDrawerOpen(true)}
+                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded flex items-center gap-1.5 cursor-pointer shrink-0"
+                  title="Table of Contents"
+                >
+                  <span className="text-sm">📑</span>
+                  <span className="hidden sm:inline">Chapters</span>
+                </button>
+              )}
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                {/* Chapter Drawer Toggle */}
-                {activeBook?.chapters && activeBook.chapters.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsChapterDrawerOpen(true)}
-                    className="app-btn text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 cursor-pointer shrink-0"
-                    title="Table of Contents"
-                  >
-                    <span>📑</span>
-                    <span className="hidden sm:inline">Chapters</span>
-                  </button>
+              {/* Document Title / Page Tracker */}
+              <span className="font-semibold truncate">
+                {activeBook
+                  ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
+                  : "Document View"}
+                {currentChapter && (
+                  <span className="ml-2 font-normal opacity-70 hidden md:inline">
+                    • {currentChapter.title}
+                  </span>
                 )}
+              </span>
+            </div>
 
-                <span className="font-semibold truncate">
-                  {activeBook
-                    ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
-                    : "Document View"}
-                  {currentChapter && (
-                    <span className="ml-2 font-normal opacity-70 hidden md:inline">
-                      • {currentChapter.title}
-                    </span>
-                  )}
-                </span>
-              </div>
+            {/* RIGHT SIDE: Controls */}
+            <div className="flex items-center gap-2 shrink-0">
               {/* Font Size Controls */}
               <div className="app-control flex items-center gap-1 px-1.5 py-0.5 rounded-md">
                 <button
@@ -946,7 +945,7 @@ export default function App() {
                 >
                   A−
                 </button>
-                <span className="app-accent font-mono font-bold w-8 text-center tabular-nums select-none">
+                <span className="app-accent font-mono font-bold w-7 text-center tabular-nums select-none">
                   {fontSize}
                 </span>
                 <button
@@ -962,7 +961,7 @@ export default function App() {
                 </button>
               </div>
 
-              <span className="hidden sm:inline app-muted">
+              <span className="hidden lg:inline app-muted ml-1">
                 {displayedLines.length} lines
               </span>
 
@@ -973,33 +972,15 @@ export default function App() {
                 title={
                   isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
                 }
-                className={`text-xs px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1 ${isFullscreen
-                  ? "bg-amber-400 text-black font-bold shadow-xs"
-                  : "app-btn border border-inherit"
-                  }`}
+                className={`text-xs px-2 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1 shrink-0 ${
+                  isFullscreen
+                    ? "bg-amber-400 text-black font-bold shadow-xs"
+                    : "app-btn border border-inherit"
+                }`}
               >
-                <span>{isFullscreen ? "🗗" : "⛶"}</span>
-                <span className="hidden sm:inline text-[11px]">
-                  {isFullscreen ? "Exit" : "Full"}
-                </span>
+                <span className="text-sm">{isFullscreen ? "🗗" : "⛶"}</span>
               </button>
             </div>
-            {/* RAM Loading & Audio Synthesis Bar */}
-            {/* {engineStatus !== "idle" && (
-              <div className="absolute bottom-0 left-0 right-0 h-[22px] bg-amber-500/10 border-t border-amber-500/20 flex items-center justify-between px-3 overflow-hidden">
-                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 tracking-wide z-10 flex items-center gap-1.5">
-                  <span className="animate-spin inline-block text-[11px]">⚙️</span>
-                  {engineStatus === "loading_voice"
-                    ? "Loading model into memory (RAM)..."
-                    : "Synthesizing audio..."}
-                </span>
-
-                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-amber-200/40 overflow-hidden">
-                  <div className="h-full bg-amber-500 w-1/3 rounded-full animate-[loadingSlide_1.4s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
-                </div>
-              </div>
-            )} */}
-            {/* Animated indeterminate bar */}
           </div>
 
           {/* Reading text body */}
