@@ -4,7 +4,7 @@ import { extractPdfPages, mapDisplayToSentences } from "./utils/pdf";
 import { isVoiceInstalled, downloadVoice, DEFAULT_PIPER_VOICE } from "./utils/tts";
 import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
 import { useReader } from "./hooks/useReader";
-import { BookShelf } from "./components/BookShelf";
+import { BookShelf, cleanBookTitle } from "./components/BookShelf";
 import { AppearanceMenu } from "./components/AppearanceMenu";
 import {
   getReaderFont,
@@ -74,7 +74,7 @@ export default function App() {
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
-
+  const formattedActiveTitle = activeBook ? cleanBookTitle(activeBook.title) : "";
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
 
@@ -569,17 +569,21 @@ export default function App() {
                 if (file) handleAddOrUploadBook(file);
               }}
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="app-btn active:scale-95 text-xs font-semibold px-3 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer shrink-0"
-            >
-              <span>📁</span> Choose PDF
-            </button>
+         {!activeBook && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="app-btn active:scale-95 text-xs font-semibold px-3 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              >
+                <span>📁</span> Choose PDF
+              </button>
+            )}
             <span
-              className="text-xs font-medium truncate block w-full sm:w-auto sm:max-w-[160px] md:max-w-xs select-none opacity-90"
-              title={activeBook?.title || "No file selected"}
+              className="text-xs font-bold truncate block w-full sm:w-auto sm:max-w-[160px] md:max-w-xs select-none"
+              title={formattedActiveTitle || "No file selected"}
             >
-              {activeBook?.title || "No file selected"}
+              {formattedActiveTitle || (
+                <span className="font-medium app-muted">No file selected</span>
+              )}
             </span>
           </div>
 
@@ -727,18 +731,18 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Play/Pause & Speed Controls - Visible only when an active book is loaded */}
-                {activeBook && (
+              {/* Play/Pause & Speed Controls - Visible ONLY on Desktop */}
+              {activeBook && (
                   <>
                     <div className="hidden md:block h-5 w-px bg-inherit/40 mx-0.5 shrink-0" />
-                    <div className="md:hidden w-full h-px bg-inherit/25" />
 
-                    <div className="flex items-center gap-2.5 w-full md:w-auto min-w-0">
+                    <div className="hidden md:flex items-center gap-2.5 w-full md:w-auto min-w-0">
                       <button
                         onClick={handleTogglePlay}
                         disabled={!voiceReady}
-                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${isPlaying ? "app-pause" : "app-play"
-                          } disabled:opacity-25`}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                          isPlaying ? "app-pause" : "app-play"
+                        } disabled:opacity-25`}
                       >
                         {engineStatus !== "idle" ? (
                           <>
@@ -763,7 +767,7 @@ export default function App() {
                           step="0.1"
                           value={speed}
                           onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                          className="w-full min-w-0 md:w-20 accent-current cursor-pointer h-1 rounded"
+                          className="w-full min-w-0 md:w-20 accent-[var(--accent)] cursor-pointer h-1 rounded"
                         />
                         <span className="text-xs app-accent font-mono font-bold w-7 text-right tabular-nums select-none shrink-0">
                           {speed.toFixed(1)}×
@@ -800,23 +804,88 @@ export default function App() {
         {/* Dynamic TTS Status Bar */}
       </header>
 
+     {/* Mobile Bottom Floating Player (Music App Style) */}
+     {compactChrome && activeBook && (
+        <div
+          className={`fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-40 transition-all duration-300 ${
+            navbarHidden ? "translate-y-24 opacity-0 pointer-events-none" : "translate-y-0 opacity-100"
+          }`}
+        >
+          <div className="app-panel shadow-2xl rounded-3xl p-4 flex flex-col gap-3 border border-[var(--panel-border)] backdrop-blur-xl bg-opacity-95 dark:bg-opacity-95">
+            {/* Track Info */}
+            <div className="flex flex-col items-center text-center px-4">
+              <h4 className="text-sm font-bold text-[var(--app-text)] truncate w-full">
+                {formattedActiveTitle}
+              </h4>
+              <p className="text-[11px] text-[var(--accent)] font-semibold mt-0.5 truncate w-full">
+                {currentChapter?.title || `Page ${currentPage + 1}`}
+              </p>
+            </div>
+
+            {/* Playback Controls */}
+            <div className="flex items-center justify-center gap-6 mt-1">
+              <button
+                onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
+                disabled={currentPage === 0}
+                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-2xl p-2 cursor-pointer transition flex items-center justify-center"
+              >
+                ⏮
+              </button>
+
+              <button
+                onClick={handleTogglePlay}
+                disabled={!voiceReady}
+                className={`w-14 h-14 flex items-center justify-center rounded-full shadow-lg cursor-pointer transition ${
+                  isPlaying ? "app-pause" : "app-play"
+                } disabled:opacity-25`}
+              >
+                {engineStatus !== "idle" ? (
+                  <span className="inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : isPlaying ? (
+                  <span className="text-xl">⏸</span>
+                ) : (
+                  <span className="text-xl ml-1">▶</span>
+                )}
+              </button>
+
+              <button
+                onClick={() => jumpTo(Math.min(activeBook.totalPages - 1, currentPage + 1), 0)}
+                disabled={currentPage >= activeBook.totalPages - 1}
+                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-2xl p-2 cursor-pointer transition flex items-center justify-center"
+              >
+                ⏭
+              </button>
+            </div>
+            
+            {/* Minimal Speed Control */}
+            <div className="flex items-center justify-between gap-3 px-3 mt-1">
+              <span className="text-[10px] app-muted uppercase tracking-wider font-bold">Speed</span>
+              <input
+                type="range"
+                min="0.5"
+                max="2.0"
+                step="0.1"
+                value={speed}
+                onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                className="flex-1 accent-[var(--accent)] cursor-pointer h-1 rounded"
+              />
+              <span className="text-xs app-accent font-mono font-bold w-8 text-right tabular-nums">
+                {speed.toFixed(1)}×
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating "Bring Back UI" Button (Visible ONLY when UI is hidden) */}
       {navbarHidden && compactChrome && (
-        <div className="fixed top-2 right-2 z-40 flex items-center gap-1.5">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
           <button
-            type="button"
-            onClick={handleTogglePlay}
-            disabled={!activeBook || !voiceReady}
-            className={`px-3 py-1.5 rounded-md text-[11px] font-bold shadow-lg cursor-pointer ${isPlaying ? "app-pause" : "app-play"
-              } disabled:opacity-25`}
-          >
-            {isPlaying ? "⏸" : "▶"}
-          </button>
-          <button
-            type="button"
             onClick={() => setNavbarHidden(false)}
-            className="app-btn text-[11px] font-semibold px-2.5 py-1.5 shadow-lg cursor-pointer"
+            className="app-panel shadow-2xl border border-[var(--panel-border)] backdrop-blur-xl bg-opacity-90 dark:bg-opacity-90 px-5 py-2.5 rounded-full text-xs font-bold text-[var(--app-text)] flex items-center gap-2 cursor-pointer transition active:scale-95 hover:bg-[var(--btn-hover)]"
           >
-            Show nav
+            <span className="text-[14px]">👀</span>
+            <span className="tracking-wide uppercase text-[10px]">Show Controls</span>
           </button>
         </div>
       )}
@@ -935,6 +1004,11 @@ export default function App() {
 
           {/* Reading text body */}
           <div
+          onClick={() => {
+            if (compactChrome) {
+              setNavbarHidden((prev) => !prev);
+            }
+          }}
             className={`px-3 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto ${isFullscreen ? "h-full max-h-none" : "max-h-[75vh]"
               }`}
           >

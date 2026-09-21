@@ -1,6 +1,7 @@
 // src/utils/tts.ts
 import * as piperTts from "@mintplex-labs/piper-tts-web";
 import { getSharedAudioContext } from "./backgroundAudio";
+import * as pdfjsLib from "pdfjs-dist";
 
 export const DEFAULT_PIPER_VOICE = "en_US-hfc_male-medium";
 

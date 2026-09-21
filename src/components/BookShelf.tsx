@@ -15,7 +15,13 @@ interface BookShelfProps {
   pageSize?: number;
   theme: "dark" | "ereader";
 }
-
+export function cleanBookTitle(rawTitle: string): string {
+  return rawTitle
+    .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, "")
+    .replace(/\s+\d{6}(\s+\d{6})?.*$/i, "")
+    .replace(/[_-]+/g, " ")
+    .trim() || rawTitle;
+}
 
 export const BookShelf: React.FC<BookShelfProps> = ({
   books,
@@ -58,16 +64,16 @@ export const BookShelf: React.FC<BookShelfProps> = ({
       e.target.value = "";
     }
   };
-  function cleanBookTitle(rawTitle: string): string {
-    return rawTitle
-      // Strip leading variations: com, _com_, OceanofPDF, _OceanofPDF.com_, etc.
-      .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, '')
-      // Strip trailing export timestamps like "260305 203703" or "2..."
-      .replace(/\s+\d{6}(\s+\d{6})?.*$/i, '')
-      // Replace underscores and hyphens with clean spaces
-      .replace(/[_-]+/g, ' ')
-      .trim() || rawTitle;
-  }
+  // function cleanBookTitle(rawTitle: string): string {
+  //   return rawTitle
+  //     // Strip leading variations: com, _com_, OceanofPDF, _OceanofPDF.com_, etc.
+  //     .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, '')
+  //     // Strip trailing export timestamps like "260305 203703" or "2..."
+  //     .replace(/\s+\d{6}(\s+\d{6})?.*$/i, '')
+  //     // Replace underscores and hyphens with clean spaces
+  //     .replace(/[_-]+/g, ' ')
+  //     .trim() || rawTitle;
+  // }
 
   function resolveChapterTitle(book: BookDoc, activePage: number): string | null {
     if (book.currentChapter) return book.currentChapter;
