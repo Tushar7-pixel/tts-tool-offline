@@ -27,8 +27,7 @@ import {
 } from "./utils/mediaSession";
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
-// import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
-
+import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
 const MemoizedReaderLine = React.memo(
   ({
     idx,
@@ -71,7 +70,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
-
+  const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
+  
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
 
@@ -398,6 +398,11 @@ export default function App() {
   };
 
   useEffect(() => {
+    return subscribeTtsStatus((status) => {
+      setEngineStatus(status);
+    });
+  }, []);
+  useEffect(() => {
     updateMediaSessionState(isPlaying);
 
     if (!isPlaying) {
@@ -488,6 +493,11 @@ export default function App() {
       className="app-shell min-h-screen flex flex-col font-sans"
       data-theme={theme}
     >
+      {/* {engineStatus !== "idle" && (
+              <div className="absolute top-0 left-0 right-0 h-[3px] bg-amber-200/40 overflow-hidden z-20">
+                <div className="h-full bg-amber-500 w-1/3 rounded-full animate-[loadingSlide_1.4s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+              </div>
+            )} */}
       {/* Top Navbar Section */}
       <header
         className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""
@@ -671,13 +681,23 @@ export default function App() {
                     <div className="md:hidden w-full h-px bg-inherit/25" />
 
                     <div className="flex items-center gap-2.5 w-full md:w-auto min-w-0">
-                      <button
+                    <button
                         onClick={handleTogglePlay}
                         disabled={!voiceReady}
-                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer shrink-0 ${isPlaying ? "app-pause" : "app-play"
-                          } disabled:opacity-25`}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                          isPlaying ? "app-pause" : "app-play"
+                        } disabled:opacity-25`}
                       >
-                        {isPlaying ? "⏸ Pause" : "▶ Play"}
+                        {engineStatus !== "idle" ? (
+                          <>
+                            <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            <span>Loading…</span>
+                          </>
+                        ) : isPlaying ? (
+                          "⏸ Pause"
+                        ) : (
+                          "▶ Play"
+                        )}
                       </button>
 
                       <div className="flex items-center gap-2 flex-1 md:flex-initial min-w-0">
@@ -818,6 +838,22 @@ export default function App() {
                 </span>
               </button>
             </div>
+            {/* RAM Loading & Audio Synthesis Bar */}
+            {/* {engineStatus !== "idle" && (
+              <div className="absolute bottom-0 left-0 right-0 h-[22px] bg-amber-500/10 border-t border-amber-500/20 flex items-center justify-between px-3 overflow-hidden">
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 tracking-wide z-10 flex items-center gap-1.5">
+                  <span className="animate-spin inline-block text-[11px]">⚙️</span>
+                  {engineStatus === "loading_voice"
+                    ? "Loading model into memory (RAM)..."
+                    : "Synthesizing audio..."}
+                </span>
+
+                <div className="absolute bottom-0 left-0 right-0 h-[2.5px] bg-amber-200/40 overflow-hidden">
+                  <div className="h-full bg-amber-500 w-1/3 rounded-full animate-[loadingSlide_1.4s_cubic-bezier(0.4,0,0.2,1)_infinite]" />
+                </div>
+              </div>
+            )} */}
+            {/* Animated indeterminate bar */}
           </div>
 
           {/* Reading text body */}
