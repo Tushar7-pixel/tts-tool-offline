@@ -28,6 +28,9 @@ import {
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
 import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
+import { parseChaptersFromDisplayPages, type ChapterItem } from "./utils/pdf";
+import { ChapterDrawer } from "./components/ChapterDrawer";
+
 const MemoizedReaderLine = React.memo(
   ({
     idx,
@@ -71,7 +74,7 @@ export default function App() {
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
-  
+
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
 
@@ -97,7 +100,7 @@ export default function App() {
     );
   });
 
-  
+
 
   // Active Gender Slot ('male' | 'female')
   const [activeGender, setActiveGender] = useState<"male" | "female">("male");
@@ -305,7 +308,7 @@ export default function App() {
     activeBook?.displayPages?.[currentPage] || [];
 
 
-  const { displayToSentence,  } = useMemo(
+  const { displayToSentence, } = useMemo(
     () => mapDisplayToSentences(displayedLines, ttsLines),
     [displayedLines, ttsLines],
   );
@@ -368,6 +371,7 @@ export default function App() {
         displayPages: extracted.displayPages,
         totalPages: extracted.pages.length,
         coverUrl: extracted.coverUrl,
+        chapters: extracted?.chapters, // <--- Add this
         currentPage: 0,
         currentLine: 0,
         updatedAt: Date.now(),
@@ -387,6 +391,7 @@ export default function App() {
       displayPages: extracted.displayPages,
       totalPages: extracted.pages.length,
       coverUrl: extracted.coverUrl,
+      chapters: extracted.chapters, // <--- Add this
       currentPage: 0,
       currentLine: 0,
       updatedAt: Date.now(),
@@ -460,6 +465,16 @@ export default function App() {
       document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
 
+
+
+
+
+
+
+
+
+
+
   // Dedicated single-target scroll controller
   useEffect(() => {
     if (!isPlaying) return;
@@ -488,6 +503,44 @@ export default function App() {
       });
     }
   }, [currentLine, currentPage, isPlaying, displayedLines, displayToSentence]);
+
+
+
+
+  // Inside App component:
+  const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
+  const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
+
+  // Async fallback chapter parsing for backwards compatibility with DB
+  useEffect(() => {
+    if (!activeBook) {
+      setActiveChapters([]);
+      return;
+    }
+
+    if (activeBook.chapters && activeBook.chapters.length > 0) {
+      setActiveChapters(activeBook.chapters);
+      return;
+    }
+
+    if (activeBook.displayPages && activeBook.displayPages.length > 0) {
+      // Push parsing to the end of the event loop to prevent UI stutter
+      setTimeout(() => {
+        const parsed = parseChaptersFromDisplayPages(activeBook.displayPages!);
+        setActiveChapters(parsed);
+      }, 0);
+    }
+  }, [activeBook]);
+
+  // Derive the active chapter label for the header
+  const currentChapter = useMemo(() => {
+    if (activeChapters.length === 0) return null;
+    return [...activeChapters].reverse().find((c) => c.pageIndex <= currentPage);
+  }, [activeChapters, currentPage]);
+
+
+
+
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
@@ -681,12 +734,11 @@ export default function App() {
                     <div className="md:hidden w-full h-px bg-inherit/25" />
 
                     <div className="flex items-center gap-2.5 w-full md:w-auto min-w-0">
-                    <button
+                      <button
                         onClick={handleTogglePlay}
                         disabled={!voiceReady}
-                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
-                          isPlaying ? "app-pause" : "app-play"
-                        } disabled:opacity-25`}
+                        className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${isPlaying ? "app-pause" : "app-play"
+                          } disabled:opacity-25`}
                       >
                         {engineStatus !== "idle" ? (
                           <>
@@ -787,6 +839,31 @@ export default function App() {
             </span>
 
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {/* Chapter Drawer Toggle */}
+                {activeBook?.chapters && activeBook.chapters.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setIsChapterDrawerOpen(true)}
+                    className="app-btn text-xs font-semibold px-2 py-1 rounded flex items-center gap-1 cursor-pointer shrink-0"
+                    title="Table of Contents"
+                  >
+                    <span>📑</span>
+                    <span className="hidden sm:inline">Chapters</span>
+                  </button>
+                )}
+
+                <span className="font-semibold truncate">
+                  {activeBook
+                    ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
+                    : "Document View"}
+                  {currentChapter && (
+                    <span className="ml-2 font-normal opacity-70 hidden md:inline">
+                      • {currentChapter.title}
+                    </span>
+                  )}
+                </span>
+              </div>
               {/* Font Size Controls */}
               <div className="app-control flex items-center gap-1 px-1.5 py-0.5 rounded-md">
                 <button
@@ -819,7 +896,7 @@ export default function App() {
               <span className="hidden sm:inline app-muted">
                 {displayedLines.length} lines
               </span>
-           
+
               {/* Fullscreen Toggle Button */}
               <button
                 type="button"
@@ -870,7 +947,7 @@ export default function App() {
                   lineHeight: 1.7,
                 }}
               >
-              {/* {displayedLines.map((line, idx) => {
+                {/* {displayedLines.map((line, idx) => {
                   const sentenceIndices = displayToSentence[idx] || [];
 
                   const isCurrent = sentenceIndices.includes(currentLine);
@@ -901,7 +978,7 @@ export default function App() {
                     />
                   );
                 })} */}
-                
+
                 {/* Find the exact first line of the currently spoken sentence */}
                 {displayedLines.map((line, idx) => {
                   const sentenceIndices = displayToSentence[idx] || [];
@@ -955,6 +1032,14 @@ export default function App() {
         onDownloadVoice={handleDownloadVoiceId}
         onSetMaleVoice={handleSetMaleVoice}
         onSetFemaleVoice={handleSetFemaleVoice}
+      />
+
+      <ChapterDrawer
+        isOpen={isChapterDrawerOpen}
+        onClose={() => setIsChapterDrawerOpen(false)}
+        chapters={activeChapters}
+        currentPage={currentPage}
+        onSelectChapter={(pageIdx) => jumpTo(pageIdx, 0)}
       />
     </div>
   );

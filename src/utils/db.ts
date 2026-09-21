@@ -1,5 +1,6 @@
 // src/utils/db.ts
 import { openDB } from 'idb';
+import type { ChapterItem } from './pdf';
 
 const DB_NAME = 'PiperBookLibraryDB';
 const STORE_NAME = 'books';
@@ -14,6 +15,8 @@ export type BookDoc = {
     coverUrl?: string;
     currentLine: number;
     updatedAt: number;
+    chapters?: ChapterItem[]; // <--- Add this field
+    currentChapter?: string;       // Direct label: "Chapter 3: The Departure"
 };
 
 const getDB = () =>

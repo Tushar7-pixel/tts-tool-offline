@@ -68,6 +68,19 @@ export const BookShelf: React.FC<BookShelfProps> = ({
       .replace(/[_-]+/g, ' ')
       .trim() || rawTitle;
   }
+
+  function resolveChapterTitle(book: BookDoc, activePage: number): string | null {
+    if (book.currentChapter) return book.currentChapter;
+    if (!book.chapters || book.chapters.length === 0) return null;
+
+    // Find the last chapter whose start page is <= activePage
+    const matching = [...book.chapters]
+      .sort((a, b) => a.pageIndex - b.pageIndex)
+      .filter((ch) => ch.pageIndex <= activePage + 1)
+      .pop();
+
+    return matching?.title ?? null;
+  }
   return (
     <>
       <div className="app-panel rounded-lg overflow-hidden flex flex-col">
@@ -131,8 +144,8 @@ export const BookShelf: React.FC<BookShelfProps> = ({
               <table className="w-full text-left text-xs border-collapse table-fixed">
                 <thead>
                   <tr className="app-muted border-b border-[var(--panel-border)]">
-                    <th className="pb-2 font-medium w-[68%]">Book</th>
-                    <th className="pb-2 text-right font-medium w-[24%]">Progress</th>
+                    <th className="pb-2 font-medium w-[58%]">Book</th>
+                    <th className="pb-2 text-right font-medium w-[34%]">Progress</th>
                     <th className="pb-2 text-right font-medium w-[8%]"></th>
                   </tr>
                 </thead>
@@ -144,6 +157,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                       ((activePageNum + 1) / b.totalPages) * 100
                     );
                     const formattedTitle = cleanBookTitle(b.title);
+                    const chapterName = resolveChapterTitle(b, activePageNum);
 
                     return (
                       <tr
@@ -185,16 +199,29 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                           </div>
                         </td>
 
-                        {/* Progress Fraction and Percentage */}
-                        <td className="py-2.5 text-right tabular-nums align-middle whitespace-nowrap">
-                          <div>
+                        {/* Progress + Chapter Details */}
+                        <td className="py-2.5 text-right align-middle whitespace-nowrap">
+                          {/* Chapter Title (truncated to prevent breaking shelf width) */}
+                          {chapterName && (
+                            <div
+                              className="text-[11px] font-medium text-[var(--accent)] truncate max-w-[110px] ml-auto"
+                              title={chapterName}
+                            >
+                              {chapterName}
+                            </div>
+                          )}
+
+                          {/* Page Fraction */}
+                          <div className="tabular-nums">
                             {activePageNum + 1}
                             <span className="app-muted font-normal text-[10px]">
                               {" "}
                               / {b.totalPages}
                             </span>
                           </div>
-                          <span className="text-[10px] app-muted">{progressPct}%</span>
+
+                          {/* Percentage */}
+                          <span className="text-[10px] app-muted tabular-nums">{progressPct}%</span>
                         </td>
 
                         {/* Delete Button */}
@@ -242,43 +269,43 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </div>
           )}
 
-         {/* Online Navigation Action Cluster */}
-      <div className="mt-3 flex flex-col gap-1.5 w-full">
-        <div className="flex gap-2 w-full">
-          <button
-            type="button"
-            disabled={!isOnline}
-            onClick={() => setIsFindModalOpen(true)}
-            title={isOnline ? 'Search books across repositories' : 'Internet connection required'}
-            className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span>🔍</span>
-            <span>Find Book Online</span>
-          </button>
+          {/* Online Navigation Action Cluster */}
+          <div className="mt-3 flex flex-col gap-1.5 w-full">
+            <div className="flex gap-2 w-full">
+              <button
+                type="button"
+                disabled={!isOnline}
+                onClick={() => setIsFindModalOpen(true)}
+                title={isOnline ? 'Search books across repositories' : 'Internet connection required'}
+                className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span>🔍</span>
+                <span>Find Book Online</span>
+              </button>
 
-          <button
-            type="button"
-            disabled={!isOnline}
-            onClick={() => setIsExploreModalOpen(true)}
-            title={isOnline ? 'Browse genres and author catalogs' : 'Internet connection required'}
-            className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <span>🧭</span>
-            <span>Explore Books</span>
-          </button>
+              <button
+                type="button"
+                disabled={!isOnline}
+                onClick={() => setIsExploreModalOpen(true)}
+                title={isOnline ? 'Browse genres and author catalogs' : 'Internet connection required'}
+                className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <span>🧭</span>
+                <span>Explore Books</span>
+              </button>
+            </div>
+
+            {!isOnline && (
+              <p className="text-[10px] app-muted text-center tracking-tight select-none">
+                ⚡ Offline mode: online catalog and discovery are disabled.
+              </p>
+            )}
+          </div>
         </div>
-
-        {!isOnline && (
-          <p className="text-[10px] app-muted text-center tracking-tight select-none">
-            ⚡ Offline mode: online catalog and discovery are disabled.
-          </p>
-        )}
-      </div>
-        </div>
       </div>
 
-    {/* Modals */}
-    <FindBookModal
+      {/* Modals */}
+      <FindBookModal
         isOpen={isFindModalOpen && isOnline}
         onClose={() => setIsFindModalOpen(false)}
         theme={theme}
@@ -288,7 +315,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
         onClose={() => setIsExploreModalOpen(false)}
         theme={theme}
       />
-    
+
     </>
   );
 };
