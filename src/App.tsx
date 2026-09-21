@@ -34,30 +34,16 @@ const MemoizedReaderLine = React.memo(
     idx,
     lineText,
     lineState,
-    isFirstCurrent,
     onLineClick,
   }: {
     idx: number;
     lineText: string;
     lineState: string;
-    isFirstCurrent: boolean;
     onLineClick: (idx: number) => void;
   }) => {
-    const activeRef = useRef<HTMLDivElement | null>(null);
-
-    // Scrolling logic moved directly into the memoized component
-    useEffect(() => {
-      if (isFirstCurrent && activeRef.current) {
-        activeRef.current.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      }
-    }, [isFirstCurrent]);
-
     return (
       <div
-        ref={isFirstCurrent ? activeRef : null}
+        id={`reader-line-${idx}`}
         onClick={() => onLineClick(idx)}
         className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
       >
@@ -66,15 +52,14 @@ const MemoizedReaderLine = React.memo(
     );
   },
   (prevProps, nextProps) => {
-    // CRITICAL FIX: Only re-render if the exact visual state of this specific line changes
     return (
       prevProps.lineState === nextProps.lineState &&
-      prevProps.isFirstCurrent === nextProps.isFirstCurrent &&
       prevProps.lineText === nextProps.lineText
     );
   }
 );
 export default function App() {
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
@@ -111,6 +96,8 @@ export default function App() {
       localStorage.getItem("echoread_female_voice") || "en_US-hfc_female-medium"
     );
   });
+
+  
 
   // Active Gender Slot ('male' | 'female')
   const [activeGender, setActiveGender] = useState<"male" | "female">("male");
@@ -467,6 +454,35 @@ export default function App() {
     return () =>
       document.removeEventListener("fullscreenchange", handleFsChange);
   }, []);
+
+  // Dedicated single-target scroll controller
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    // Find the first line index that corresponds to the active spoken sentence
+    const activeDisplayIdx = displayedLines.findIndex((_, i) =>
+      (displayToSentence[i] || []).includes(currentLine)
+    );
+
+    if (activeDisplayIdx === -1) return;
+
+    const container = scrollContainerRef.current;
+    const targetElement = document.getElementById(`reader-line-${activeDisplayIdx}`);
+
+    if (container && targetElement) {
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = targetElement.getBoundingClientRect();
+
+      // Calculate relative position within the scroll container
+      const targetTop = targetRect.top - containerRect.top + container.scrollTop;
+      const centeredOffset = targetTop - container.clientHeight / 2 + targetRect.height / 2;
+
+      container.scrollTo({
+        top: Math.max(0, centeredOffset),
+        behavior: "smooth",
+      });
+    }
+  }, [currentLine, currentPage, isPlaying, displayedLines, displayToSentence]);
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
@@ -851,33 +867,21 @@ export default function App() {
                 })} */}
                 
                 {/* Find the exact first line of the currently spoken sentence */}
-                {(() => {
-                  const firstCurrentIdx = displayedLines.findIndex((_, i) =>
-                    (displayToSentence[i] || []).includes(currentLine)
+                {displayedLines.map((line, idx) => {
+                  const sentenceIndices = displayToSentence[idx] || [];
+                  const isCurrent = sentenceIndices.includes(currentLine);
+                  const lineState = isCurrent ? "is-current" : "is-pending";
+
+                  return (
+                    <MemoizedReaderLine
+                      key={idx}
+                      idx={idx}
+                      lineText={line}
+                      lineState={lineState}
+                      onLineClick={handleDisplayLineClick}
+                    />
                   );
-
-                  return displayedLines.map((line, idx) => {
-                    const sentenceIndices = displayToSentence[idx] || [];
-                    const isCurrent = sentenceIndices.includes(currentLine);
-                    
-                    // Only true for the very first line of the active sentence
-                    const isStrictlyFirstCurrent = idx === firstCurrentIdx;
-
-                    // Stripped down to just current and pending (no processed/queued background renders)
-                    const lineState = isCurrent ? "is-current" : "is-pending";
-
-                    return (
-                      <MemoizedReaderLine
-                        key={idx}
-                        idx={idx}
-                        lineText={line}
-                        lineState={lineState}
-                        isFirstCurrent={isStrictlyFirstCurrent}
-                        onLineClick={handleDisplayLineClick}
-                      />
-                    );
-                  });
-                })()}
+                })}
               </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center app-muted text-sm space-y-2">
