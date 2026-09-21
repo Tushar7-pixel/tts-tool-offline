@@ -184,8 +184,8 @@ code {
   --row-selected-text: #2c302e;
   --progress-track: #e2ded6;
   --progress-fill: #6b746c;
-  --play-bg: #f5da81ef  ;
-  --play-text: #635d5d;
+  --play-bg: #ffb900  ;
+  --play-text: #000000;
   --pause-bg: #ece6d8;
   --pause-text: #2c302e;
   --pause-border: #504328;
