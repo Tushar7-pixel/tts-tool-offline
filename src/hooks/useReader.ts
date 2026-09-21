@@ -275,15 +275,20 @@ export function useReader(
         }
 
         // CRITICAL FIX: If blob generation fails entirely, skip to next line gracefully
+        // if (!blob) {
+        //   console.warn(`Skipped line ${lineIdx} due to synthesis failure.`);
+        //   const nextLine = lineIdx + 1;
+        //   currentLineRef.current = nextLine;
+        //   setCurrentLine(nextLine);
+        //   if (bookIdRef.current) {
+        //      updateBookProgress(bookIdRef.current, pageIdx, nextLine);
+        //   }
+        //   void playLineAt(pageIdx, nextLine);
+        //   return;
+        // }
         if (!blob) {
-          console.warn(`Skipped line ${lineIdx} due to synthesis failure.`);
-          const nextLine = lineIdx + 1;
-          currentLineRef.current = nextLine;
-          setCurrentLine(nextLine);
-          if (bookIdRef.current) {
-             updateBookProgress(bookIdRef.current, pageIdx, nextLine);
-          }
-          void playLineAt(pageIdx, nextLine);
+          console.error(`Synthesis returned empty or failed for line ${lineIdx} on page ${pageIdx}. Halting.`);
+          await finishPlayback();
           return;
         }
 
