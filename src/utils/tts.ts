@@ -4,10 +4,26 @@ import { getSharedAudioContext } from "./backgroundAudio";
 
 export const DEFAULT_PIPER_VOICE = "en_US-hfc_male-medium";
 
+// Detect mobile device
+export const isMobileDevice = (): boolean => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent || ""
+  ) || (window.matchMedia && window.matchMedia("(max-width: 768px)").matches);
+};
+
+const IS_MOBILE = isMobileDevice();
+
 export type TtsEngineStatus = "idle" | "loading_voice" | "generating";
 
 const statusListeners = new Set<(status: TtsEngineStatus) => void>();
 let currentStatus: TtsEngineStatus = "idle";
+
+function updateGlobalStatus(nextStatus: TtsEngineStatus) {
+  if (nextStatus !== currentStatus) {
+    currentStatus = nextStatus;
+    statusListeners.forEach((listener) => listener(currentStatus));
+  }
+}
 
 export function subscribeTtsStatus(cb: (status: TtsEngineStatus) => void) {
   statusListeners.add(cb);
@@ -17,10 +33,50 @@ export function subscribeTtsStatus(cb: (status: TtsEngineStatus) => void) {
   };
 }
 
-// CRITICAL FIX: Limit outer worker to 1. 
-// ONNX handles internal multithreading. Multiple outer workers duplicate model RAM.
-const WORKER_COUNT = 1;
+// -------------------------------------------------------------
+// 1. MOBILE DIRECT IN-THREAD ENGINE (No Workers, No OPFS bug)
+// -------------------------------------------------------------
+let loadedMainThreadVoice: string | null = null;
+let isMainThreadBusy = false;
 
+async function synthesizeDirect(text: string, voiceId: string): Promise<Blob> {
+  const activeVoice = voiceId || DEFAULT_PIPER_VOICE;
+  const cleanText = text.trim();
+
+  if (!cleanText) {
+    return new Blob([], { type: "audio/wav" });
+  }
+
+  // Queue calls sequentially if busy
+  while (isMainThreadBusy) {
+    await new Promise((res) => setTimeout(res, 50));
+  }
+
+  isMainThreadBusy = true;
+  updateGlobalStatus("generating");
+
+  try {
+    if (loadedMainThreadVoice !== activeVoice) {
+      updateGlobalStatus("loading_voice");
+      const TtsSession = (piperTts as any).TtsSession;
+      if (TtsSession) TtsSession._instance = null;
+    }
+
+    const blob = await piperTts.predict({ text: cleanText, voiceId: activeVoice });
+    loadedMainThreadVoice = activeVoice;
+    return blob;
+  } catch (err) {
+    console.error("Main thread TTS synthesis error:", err);
+    throw err;
+  } finally {
+    isMainThreadBusy = false;
+    updateGlobalStatus("idle");
+  }
+}
+
+// -------------------------------------------------------------
+// 2. DESKTOP WORKER ENGINE (Unchanged)
+// -------------------------------------------------------------
 type PendingJob = {
   id: number;
   text: string;
@@ -41,28 +97,8 @@ const jobQueue: PendingJob[] = [];
 const activeJobs = new Map<number, { job: PendingJob; workerIndex: number }>();
 let schedulingCursor = 0;
 
-function updateGlobalStatus() {
-  let nextStatus: TtsEngineStatus = "idle";
-
-  if (workers.some((worker) => worker.status === "loading_voice")) {
-    nextStatus = "loading_voice";
-  } else if (workers.some((worker) => worker.status === "generating")) {
-    nextStatus = "generating";
-  } else if (activeJobs.size > 0) {
-    nextStatus = "generating";
-  }
-
-  if (nextStatus !== currentStatus) {
-    currentStatus = nextStatus;
-    statusListeners.forEach((listener) => {
-      listener(currentStatus);
-    });
-  }
-}
-
 function findAvailableWorker(): number | null {
   if (workers.length === 0) return null;
-
   for (let offset = 0; offset < workers.length; offset++) {
     const index = (schedulingCursor + offset) % workers.length;
     if (!workers[index].busy) {
@@ -84,7 +120,6 @@ function dispatchJobs() {
     workerState.busy = true;
     workerState.status = "generating";
     activeJobs.set(job.id, { job, workerIndex });
-    updateGlobalStatus();
 
     try {
       workerState.worker.postMessage({
@@ -98,10 +133,8 @@ function dispatchJobs() {
       workerState.busy = false;
       workerState.status = "idle";
       job.reject(error);
-      updateGlobalStatus();
     }
   }
-  updateGlobalStatus();
 }
 
 function createWorker(index: number): WorkerState {
@@ -120,7 +153,6 @@ function createWorker(index: number): WorkerState {
 
     if (type === "STATUS") {
       state.status = status;
-      updateGlobalStatus();
       return;
     }
 
@@ -139,7 +171,6 @@ function createWorker(index: number): WorkerState {
       }
 
       dispatchJobs();
-      updateGlobalStatus();
     }
   };
 
@@ -151,7 +182,6 @@ function createWorker(index: number): WorkerState {
         break;
       }
     }
-
     if (failedJobId !== null) {
       const active = activeJobs.get(failedJobId);
       if (active) {
@@ -159,18 +189,17 @@ function createWorker(index: number): WorkerState {
         active.job.reject(new Error(event.message || "TTS worker crashed"));
       }
     }
-
     state.busy = false;
     state.status = "idle";
     dispatchJobs();
-    updateGlobalStatus();
   };
 
   return state;
 }
 
 function initWorkers() {
-  // CRITICAL FIX: Kill orphaned Web Workers caused by React Fast Refresh (HMR)
+  if (IS_MOBILE) return; // Completely skip worker initialization on mobile
+
   if ((window as any).__echoread_tts_workers) {
     (window as any).__echoread_tts_workers.forEach((w: WorkerState) => {
       w.worker.onmessage = null;
@@ -179,32 +208,36 @@ function initWorkers() {
     });
   }
 
-  workers = [];
-  for (let i = 0; i < WORKER_COUNT; i++) {
-    workers.push(createWorker(i));
-  }
+  workers = [createWorker(0)];
   schedulingCursor = 0;
-  updateGlobalStatus();
-
-  // Register the new active workers globally for the next potential HMR reload
   (window as any).__echoread_tts_workers = workers;
 }
+
 initWorkers();
 
+// -------------------------------------------------------------
+// 3. PUBLIC API
+// -------------------------------------------------------------
 export function clearTTSQueue() {
   while (jobQueue.length > 0) {
     const job = jobQueue.shift()!;
     job.reject(new Error("Synthesis skipped due to page jump/pause"));
   }
-  updateGlobalStatus();
 }
 
 export function cancelPendingSynthesis() {
+  if (IS_MOBILE) {
+    const TtsSession = (piperTts as any).TtsSession;
+    if (TtsSession) TtsSession._instance = null;
+    loadedMainThreadVoice = null;
+    isMainThreadBusy = false;
+    return;
+  }
+
   while (jobQueue.length > 0) {
     const job = jobQueue.shift()!;
     job.reject(new Error("Synthesis cancelled due to voice switch"));
   }
-
   for (const [, active] of activeJobs) {
     active.job.reject(new Error("Synthesis cancelled due to voice switch"));
   }
@@ -215,7 +248,6 @@ export function cancelPendingSynthesis() {
     state.worker.onerror = null;
     state.worker.terminate();
   }
-
   workers = [];
   initWorkers();
 }
@@ -241,6 +273,12 @@ export async function downloadVoice(
 }
 
 export async function synthesize(text: string, voiceId?: string): Promise<Blob> {
+  // Mobile directly runs on the main thread
+  if (IS_MOBILE) {
+    return synthesizeDirect(text, voiceId || DEFAULT_PIPER_VOICE);
+  }
+
+  // Desktop runs via Web Worker
   const activeVoice = voiceId || DEFAULT_PIPER_VOICE;
   const cleanText = text.trim();
 
@@ -256,7 +294,6 @@ export async function synthesize(text: string, voiceId?: string): Promise<Blob> 
       resolve,
       reject,
     };
-
     jobQueue.push(job);
     dispatchJobs();
   });

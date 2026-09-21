@@ -5,8 +5,12 @@ import { updateBookProgress } from "../utils/db";
 
 type LinePos = { pageIdx: number; lineIdx: number; text: string };
 type CacheKeyData = { voiceId: string; pageIdx: number; lineIdx: number };
+// src/hooks/useReader.ts
+import { isMobileDevice } from "../utils/tts";
 
-const PREFETCH_LINES = 5;
+// Prefetch only 1 sentence ahead on mobile to keep the main thread responsive, 4 on desktop
+const PREFETCH_LINES = isMobileDevice() ? 2 : 4;
+// const PREFETCH_LINES = 5;
 
 function posKey(pageIdx: number, lineIdx: number, voiceId?: string) {
   return JSON.stringify([voiceId || "default", pageIdx, lineIdx]);
