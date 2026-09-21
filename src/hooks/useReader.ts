@@ -32,8 +32,6 @@ export function useReader(
   const [currentLine, setCurrentLine] = useState(initialLine);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<number>(1.0);
-  const [queuedLines, setQueuedLines] = useState<number[]>([]);
-  const [processedLines, setProcessedLines] = useState<number[]>([]);
 
   const audioRef = useRef<HTMLAudioElement | null>(new Audio());
   const speedRef = useRef<number>(1.0);
@@ -77,25 +75,25 @@ export function useReader(
     }
   }, []);
 
-  const processedForPage = useCallback((pageIdx: number) => {
-    const lines: number[] = [];
-    const activeVoice = voiceIdRef.current || "default";
+  // const processedForPage = useCallback((pageIdx: number) => {
+  //   const lines: number[] = [];
+  //   const activeVoice = voiceIdRef.current || "default";
 
-    for (const key of blobCacheRef.current.keys()) {
-      const parsed = parseCacheKey(key);
-      if (!parsed) continue;
+  //   for (const key of blobCacheRef.current.keys()) {
+  //     const parsed = parseCacheKey(key);
+  //     if (!parsed) continue;
 
-      if (parsed.voiceId === activeVoice && parsed.pageIdx === pageIdx) {
-        lines.push(parsed.lineIdx);
-      }
-    }
-    lines.sort((a, b) => a - b);
-    return lines;
-  }, []);
+  //     if (parsed.voiceId === activeVoice && parsed.pageIdx === pageIdx) {
+  //       lines.push(parsed.lineIdx);
+  //     }
+  //   }
+  //   lines.sort((a, b) => a - b);
+  //   return lines;
+  // }, []);
 
-  const publishProcessed = useCallback((pageIdx: number) => {
-    setProcessedLines(processedForPage(pageIdx));
-  }, [processedForPage]);
+  // const publishProcessed = useCallback((pageIdx: number) => {
+  //   // setProcessedLines(processedForPage(pageIdx));
+  // }, [processedForPage]);
 
   const pruneCacheToPage = useCallback((pageIdx: number) => {
     for (const key of [...blobCacheRef.current.keys()]) {
@@ -108,8 +106,8 @@ export function useReader(
         blobCacheRef.current.delete(key);
       }
     }
-    publishProcessed(pageIdx);
-  }, [publishProcessed]);
+    // publishProcessed(pageIdx);
+  }, []);
 
   const goToPage = useCallback((pageIdx: number, lineIdx: number) => {
     currentPageRef.current = pageIdx;
@@ -128,7 +126,7 @@ export function useReader(
       audioRef.current.pause();
     }
     revokeObjectUrl();
-    setQueuedLines([]);
+    // setQueuedLines([]);
     
     // Instantly drops stale prefetch lines allowing the worker to grab new page jobs
     clearTTSQueue();
@@ -166,7 +164,7 @@ export function useReader(
 
         if (pos.pageIdx === keepPage || pos.pageIdx === keepPage + 1) {
           blobCacheRef.current.set(key, blob);
-          publishProcessed(keepPage);
+          // publishProcessed(keepPage);
         }
         return blob;
       })
@@ -185,7 +183,7 @@ export function useReader(
 
     inflightRef.current.set(key, request);
     return request;
-  }, [publishProcessed]);
+  }, []);
 
   const startBackgroundProcessing = useCallback((pageIdx: number, startLineIdx: number, session: number) => {
     const previous = prefetchSessionRef.current;
@@ -204,27 +202,27 @@ export function useReader(
       positions.push({ pageIdx, lineIdx, text: pageLines[lineIdx] });
     }
 
-    const pendingLineNumbers = positions
-      .map((pos) => pos.lineIdx)
-      .filter((lineIdx) => {
-        const key = posKey(pageIdx, lineIdx, voiceIdRef.current);
-        return !blobCacheRef.current.has(key);
-      });
+    // const pendingLineNumbers = positions
+    //   .map((pos) => pos.lineIdx)
+    //   .filter((lineIdx) => {
+    //     const key = posKey(pageIdx, lineIdx, voiceIdRef.current);
+    //     return !blobCacheRef.current.has(key);
+    //   });
 
-    setQueuedLines(pendingLineNumbers.filter((lineIdx) => lineIdx !== startLineIdx));
+    // setQueuedLines(pendingLineNumbers.filter((lineIdx) => lineIdx !== startLineIdx));
 
-    for (const pos of positions) {
-      void getBlob(pos, session).then(() => {
-        if (session !== sessionRef.current) return;
-        setQueuedLines((previousLines) => previousLines.filter((line) => line !== pos.lineIdx));
-      });
-    }
+    // for (const pos of positions) {
+    //   void getBlob(pos, session).then(() => {
+    //     if (session !== sessionRef.current) return;
+    //     setQueuedLines((previousLines) => previousLines.filter((line) => line !== pos.lineIdx));
+    //   });
+    // }
   }, [getBlob]);
 
   const finishPlayback = useCallback(async () => {
     isPlayingRef.current = false;
     setIsPlaying(false);
-    setQueuedLines([]);
+    // setQueuedLines([]);
     prefetchSessionRef.current = null;
     await releaseWakeLock();
   }, [releaseWakeLock]);
@@ -352,8 +350,8 @@ export function useReader(
     revokeObjectUrl();
     blobCacheRef.current.clear();
     inflightRef.current.clear();
-    setQueuedLines([]);
-    setProcessedLines([]);
+    // setQueuedLines([]);
+    // setProcessedLines([]);
 
     cancelPendingSynthesis();
     startBackgroundProcessing(currentPageRef.current, currentLineRef.current, newSession);
@@ -380,8 +378,8 @@ export function useReader(
     inflightRef.current.clear();
     isPlayingRef.current = false;
     setIsPlaying(false);
-    setQueuedLines([]);
-    setProcessedLines([]);
+    // setQueuedLines([]);
+    // setProcessedLines([]);
   }, [bookId, revokeObjectUrl]);
 
   const togglePlay = useCallback(async () => {
@@ -435,8 +433,6 @@ export function useReader(
   return {
     currentPage,
     currentLine,
-    queuedLines,
-    processedLines,
     isPlaying,
     speed,
     setSpeed,

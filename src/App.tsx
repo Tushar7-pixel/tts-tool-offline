@@ -27,7 +27,7 @@ import {
 } from "./utils/mediaSession";
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
-import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
+// import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
 
 const MemoizedReaderLine = React.memo(
   ({
@@ -86,7 +86,6 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
-  const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
 
   const MIN_FONT_SIZE = 12;
   const MAX_FONT_SIZE = 28;
@@ -187,11 +186,7 @@ export default function App() {
     setBooks(list.sort((a, b) => b.updatedAt - a.updatedAt));
   };
 
-  useEffect(() => {
-    return subscribeTtsStatus((status) => {
-      setEngineStatus(status);
-    });
-  }, []);
+
 
   useEffect(() => {
     const font = getReaderFont(fontId);
@@ -268,8 +263,6 @@ export default function App() {
   const {
     currentPage,
     currentLine,
-    queuedLines,
-    processedLines,
     isPlaying,
     speed,
     setSpeed,
@@ -323,11 +316,7 @@ export default function App() {
 
   const displayedLines =
     activeBook?.displayPages?.[currentPage] || [];
-  const totalPageLines = displayedLines.length;
-  const processedCount = processedLines.length;
-  const generationPct = totalPageLines > 0
-    ? Math.min(100, Math.round((processedCount / totalPageLines) * 100))
-    : 0;
+
 
   const { displayToSentence,  } = useMemo(
     () => mapDisplayToSentences(displayedLines, ttsLines),
@@ -794,37 +783,7 @@ export default function App() {
               <span className="hidden sm:inline app-muted">
                 {displayedLines.length} lines
               </span>
-              {engineStatus !== "idle" && (
-                <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center bg-amber-50 z-10">
-                  <div className="w-full h-[24px] border-t border-amber-400/30 flex items-center justify-between px-3 relative overflow-hidden shadow-inner">
-                    <span className="text-[10px] font-bold text-amber-700 tracking-wide z-10 flex items-center gap-1.5 drop-shadow-sm">
-                      {engineStatus === "loading_voice" ? (
-                        <>
-                          <span className="animate-spin inline-block">⚙️</span>
-                          Loading Model into Memory...
-                        </>
-                      ) : (
-                        <>
-                          <span className="animate-pulse inline-block">⚡</span>
-                          Synthesizing Page Audio ({generationPct}%)
-                        </>
-                      )}
-                    </span>
-
-                    {/* Progress Indicator */}
-                    <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-amber-200/50">
-                      {engineStatus === "loading_voice" ? (
-                        <div className="h-full bg-amber-500 w-1/3 rounded-full animate-[slideRight_1.5s_ease-in-out_infinite]" />
-                      ) : (
-                        <div
-                          className="h-full bg-amber-500 transition-all duration-300 ease-out"
-                          style={{ width: `${generationPct}%` }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+           
               {/* Fullscreen Toggle Button */}
               <button
                 type="button"
@@ -859,32 +818,25 @@ export default function App() {
                   lineHeight: 1.7,
                 }}
               >
-                {displayedLines.map((line, idx) => {
+              {/* {displayedLines.map((line, idx) => {
                   const sentenceIndices = displayToSentence[idx] || [];
 
                   const isCurrent = sentenceIndices.includes(currentLine);
 
-                  const isQueued =
-                    !isCurrent &&
-                    sentenceIndices.some((sentenceIdx) =>
-                      queuedLines.includes(sentenceIdx)
-                    );
-
+                  // Only check if the line is processed, completely skipping the queued state
                   const isProcessed =
                     !isCurrent &&
-                    !isQueued &&
                     sentenceIndices.length > 0 &&
                     sentenceIndices.every((sentenceIdx) =>
                       processedLines.includes(sentenceIdx)
                     );
 
+                  // Assign state based only on current or processed status
                   const lineState = isCurrent
                     ? "is-current"
-                    : isQueued
-                      ? "is-queued"
-                      : isProcessed
-                        ? "is-processed"
-                        : "is-pending";
+                    : isProcessed
+                      ? "is-processed"
+                      : "is-pending";
 
                   return (
                     <MemoizedReaderLine
@@ -896,7 +848,36 @@ export default function App() {
                       onLineClick={handleDisplayLineClick}
                     />
                   );
-                })}
+                })} */}
+                
+                {/* Find the exact first line of the currently spoken sentence */}
+                {(() => {
+                  const firstCurrentIdx = displayedLines.findIndex((_, i) =>
+                    (displayToSentence[i] || []).includes(currentLine)
+                  );
+
+                  return displayedLines.map((line, idx) => {
+                    const sentenceIndices = displayToSentence[idx] || [];
+                    const isCurrent = sentenceIndices.includes(currentLine);
+                    
+                    // Only true for the very first line of the active sentence
+                    const isStrictlyFirstCurrent = idx === firstCurrentIdx;
+
+                    // Stripped down to just current and pending (no processed/queued background renders)
+                    const lineState = isCurrent ? "is-current" : "is-pending";
+
+                    return (
+                      <MemoizedReaderLine
+                        key={idx}
+                        idx={idx}
+                        lineText={line}
+                        lineState={lineState}
+                        isFirstCurrent={isStrictlyFirstCurrent}
+                        onLineClick={handleDisplayLineClick}
+                      />
+                    );
+                  });
+                })()}
               </div>
             ) : (
               <div className="h-64 flex flex-col items-center justify-center app-muted text-sm space-y-2">
