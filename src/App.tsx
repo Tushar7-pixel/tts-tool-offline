@@ -385,12 +385,12 @@ export default function App() {
     currentActiveVoiceId,
   );
   // Track if user explicitly initiated/tapped playback highlighting
-  const [showActiveLineHighlight, setShowActiveLineHighlight] = useState(false);
+  // const [showActiveLineHighlight, setShowActiveLineHighlight] = useState(false);
   const handleTogglePlay = useCallback(async () => {
     if (!activeBook || !voiceReady) return;
 
     if (!isPlaying) {
-      setShowActiveLineHighlight(true);
+      // setShowActiveLineHighlight(true);
       await ensureAudioUnlocked();
       await requestScreenWakeLock();
     } else {
@@ -487,7 +487,7 @@ export default function App() {
     if (sentenceIndices.length === 0) return;
 
     // Enable playback line highlight on explicit tap/click
-    setShowActiveLineHighlight(true);
+    // setShowActiveLineHighlight(true);
     await ensureAudioUnlocked();
     jumpTo(currentPage, sentenceIndices[0]);
   };
