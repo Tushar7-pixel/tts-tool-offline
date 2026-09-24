@@ -6,11 +6,18 @@ import React, {
   useRef,
   useCallback,
 } from "react";
-import { extractPdfPages, mapDisplayToSentences } from "./utils/pdf";
+import {
+  extractPdfPages,
+  mapDisplayToSentences,
+  parseChaptersFromDisplayPages,
+  type ChapterItem,
+} from "./utils/pdf";
 import {
   isVoiceInstalled,
   downloadVoice,
   DEFAULT_PIPER_VOICE,
+  subscribeTtsStatus,
+  type TtsEngineStatus,
 } from "./utils/tts";
 import {
   saveBook,
@@ -18,11 +25,17 @@ import {
   type BookDoc,
   deleteBook,
   applyMultiLineHighlight,
-  type HighlightItem,
 } from "./utils/db";
 import { useReader } from "./hooks/useReader";
+import { useTextSelection } from "./hooks/useTextSelection";
 import { BookShelf, cleanBookTitle } from "./components/BookShelf";
 import { AppearanceMenu } from "./components/AppearanceMenu";
+import { VoiceManagerModal } from "./components/VoiceManagerModal";
+import { ChapterDrawer } from "./components/ChapterDrawer";
+import { ReaderTextBody } from "./components/reader/ReaderTextBody";
+import { HighlightToolbar } from "./components/reader/HighlightToolbar";
+import { DesktopPlaybackDock } from "./components/player/DesktopPlaybackDock";
+import { MobileFloatingPlayer } from "./components/player/MobileFloatingPlayer";
 import {
   getReaderFont,
   loadGoogleFont,
@@ -42,20 +55,7 @@ import {
   setupMediaSession,
   updateMediaSessionState,
 } from "./utils/mediaSession";
-import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
-import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
-import { parseChaptersFromDisplayPages, type ChapterItem } from "./utils/pdf";
-import { ChapterDrawer } from "./components/ChapterDrawer";
-
-const HIGHLIGHT_COLORS = [
-  { label: "Yellow", value: "rgba(253, 224, 71, 0.4)", bg: "bg-yellow-300" },
-  { label: "Green", value: "rgba(134, 239, 172, 0.4)", bg: "bg-green-300" },
-  { label: "Blue", value: "rgba(147, 197, 253, 0.4)", bg: "bg-blue-300" },
-  { label: "Purple", value: "rgba(216, 180, 254, 0.4)", bg: "bg-purple-300" },
-  { label: "Pink", value: "rgba(249, 168, 212, 0.4)", bg: "bg-pink-300" },
-  { label: "Orange", value: "rgba(253, 186, 116, 0.4)", bg: "bg-orange-300" },
-];
 
 function DictionaryModal({
   word,
@@ -71,7 +71,7 @@ function DictionaryModal({
   if (!word) return null;
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm p-4 transition-opacity"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
@@ -80,13 +80,11 @@ function DictionaryModal({
       >
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-lg opacity-50 hover:opacity-100 cursor-pointer w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition"
+          className="absolute top-3 right-3 text-lg opacity-50 hover:opacity-100 cursor-pointer w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10"
         >
           ✕
         </button>
-        <h3 className="text-xl font-bold mb-2 capitalize pr-6 text-[var(--app-text)]">
-          {word}
-        </h3>
+        <h3 className="text-xl font-bold mb-2 capitalize pr-6">{word}</h3>
         {loading && (
           <div className="py-6 flex justify-center">
             <span className="inline-block w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin"></span>
@@ -102,16 +100,9 @@ function DictionaryModal({
                 <p className="text-[11px] font-bold text-[var(--accent)] uppercase tracking-wider bg-[var(--accent)]/10 inline-block px-2 py-0.5 rounded">
                   {m.partOfSpeech}
                 </p>
-                <ul className="list-disc pl-5 text-sm space-y-2 text-[var(--app-text)] opacity-90">
+                <ul className="list-disc pl-5 text-sm space-y-2 opacity-90">
                   {m.definitions.slice(0, 3).map((d: any, j: number) => (
-                    <li key={j}>
-                      {d.definition}
-                      {d.example && (
-                        <p className="text-xs italic opacity-70 mt-0.5">
-                          "{d.example}"
-                        </p>
-                      )}
-                    </li>
+                    <li key={j}>{d.definition}</li>
                   ))}
                 </ul>
               </div>
@@ -123,98 +114,11 @@ function DictionaryModal({
   );
 }
 
-const MemoizedReaderLine = React.memo(
-  ({
-    idx,
-    lineText,
-    lineState,
-    highlights,
-    onLineClick,
-  }: {
-    idx: number;
-    lineText: string;
-    lineState: string;
-    highlights?: HighlightItem[];
-    onLineClick: (idx: number) => void;
-  }) => {
-    let renderedContent: React.ReactNode = lineText;
-
-    if (lineText.length > 0 && highlights && highlights.length > 0) {
-      type Segment = { text: string; color?: string };
-      let segments: Segment[] = [{ text: lineText }];
-
-      for (const hl of highlights) {
-        if (!hl.text) continue;
-        const nextSegments: Segment[] = [];
-
-        for (const seg of segments) {
-          if (seg.color || !seg.text.includes(hl.text)) {
-            nextSegments.push(seg);
-          } else {
-            const parts = seg.text.split(hl.text);
-            for (let i = 0; i < parts.length; i++) {
-              if (parts[i].length > 0) nextSegments.push({ text: parts[i] });
-              if (i < parts.length - 1)
-                nextSegments.push({ text: hl.text, color: hl.color });
-            }
-          }
-        }
-        segments = nextSegments;
-      }
-
-      renderedContent = (
-        <>
-          {segments.map((s, sIdx) =>
-            s.color ? (
-              <mark
-                key={sIdx}
-                style={{
-                  backgroundColor: s.color,
-                  color: "inherit",
-                  padding: "0 2px",
-                  borderRadius: "3px",
-                }}
-              >
-                {s.text}
-              </mark>
-            ) : (
-              <React.Fragment key={sIdx}>{s.text}</React.Fragment>
-            ),
-          )}
-        </>
-      );
-    } else if (lineText.length === 0) {
-      renderedContent = <span className="block h-[1em]">&nbsp;</span>;
-    }
-
-    return (
-      <div
-        id={`reader-line-${idx}`}
-        onClick={() => onLineClick(idx)}
-        className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
-      >
-        {renderedContent}
-      </div>
-    );
-  },
-  (prevProps, nextProps) => {
-    return (
-      prevProps.lineState === nextProps.lineState &&
-      prevProps.lineText === nextProps.lineText &&
-      JSON.stringify(prevProps.highlights) ===
-        JSON.stringify(nextProps.highlights)
-    );
-  },
-);
-
-type SelectionData = {
-  rect: DOMRect;
-  text: string;
-  lineEntries: { lineIdx: number; text: string }[];
-};
-
 export default function App() {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const readerContainerRef = useRef<HTMLElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
@@ -227,33 +131,44 @@ export default function App() {
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
-  const formattedActiveTitle = activeBook
-    ? cleanBookTitle(activeBook.title)
-    : "";
-  const MIN_FONT_SIZE = 12;
-  const MAX_FONT_SIZE = 28;
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
+  const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // Sleep Timer States
+  const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
+  const [sleepMins, setSleepMins] = useState<number | null>(null);
+  const targetChapterPage = useRef<number | null>(null);
+
+  // Dictionary States
+  const [dictWord, setDictWord] = useState<string | null>(null);
+  const [dictData, setDictData] = useState<any>(null);
+  const [dictLoading, setDictLoading] = useState(false);
+
+  // Custom Text Selection Hook
+  const {
+    selectionParams,
+    showColorPicker,
+    setShowColorPicker,
+    clearSelection,
+    lastSelectionTimeRef,
+  } = useTextSelection();
+
+  // Voice Management States
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
     const saved = localStorage.getItem("echoread_installed_voices");
     return saved ? JSON.parse(saved) : ["en_US-hfc_male-medium"];
   });
-
-  const [maleVoiceId, setMaleVoiceId] = useState<string>(() => {
-    return (
-      localStorage.getItem("echoread_male_voice") || "en_US-hfc_male-medium"
-    );
-  });
-
-  const [femaleVoiceId, setFemaleVoiceId] = useState<string | null>(() => {
-    return (
-      localStorage.getItem("echoread_female_voice") || "en_US-hfc_female-medium"
-    );
-  });
-  // Track selection creation time to prevent mouse-up click collision on desktop
-  const lastSelectionTimeRef = useRef<number>(0);
+  const [maleVoiceId, setMaleVoiceId] = useState<string>(
+    () =>
+      localStorage.getItem("echoread_male_voice") || "en_US-hfc_male-medium",
+  );
+  const [femaleVoiceId, setFemaleVoiceId] = useState<string | null>(
+    () =>
+      localStorage.getItem("echoread_female_voice") ||
+      "en_US-hfc_female-medium",
+  );
   const [activeGender, setActiveGender] = useState<"male" | "female">("male");
 
   const isMaleReady = installedVoiceIds.includes(maleVoiceId);
@@ -261,7 +176,6 @@ export default function App() {
     femaleVoiceId && installedVoiceIds.includes(femaleVoiceId),
   );
   const canToggleVoices = isMaleReady && isFemaleReady;
-
   const currentActiveVoiceId =
     activeGender === "male" ? maleVoiceId : femaleVoiceId || maleVoiceId;
   const maleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === maleVoiceId);
@@ -270,44 +184,28 @@ export default function App() {
     (v) => v.id === currentActiveVoiceId,
   );
 
-  const maleLabel = maleVoiceInfo
-    ? `Male: ${maleVoiceInfo.name.split(" ")[0]}`
-    : "Male";
-  const femaleLabel = femaleVoiceInfo
-    ? isFemaleReady
-      ? `Female: ${femaleVoiceInfo.name.split(" ")[0]}`
-      : `Download Female`
-    : "+ Add Female";
+  const ttsPages = useMemo(() => {
+    if (!activeBook?.pages) return [];
+    return activeBook.pages.map((page) =>
+      page.filter((line) => line.trim().length > 0),
+    );
+  }, [activeBook?.pages]);
 
-  const handleSetMaleVoice = (id: string) => {
-    setMaleVoiceId(id);
-    localStorage.setItem("echoread_male_voice", id);
-  };
-
-  const handleSetFemaleVoice = (id: string) => {
-    setFemaleVoiceId(id);
-    localStorage.setItem("echoread_female_voice", id);
-  };
-
-  const handleToggleVoiceGender = () => {
-    if (!canToggleVoices) return;
-    setActiveGender((prev) => (prev === "male" ? "female" : "male"));
-  };
-
-  const handleDownloadVoiceId = async (id: string) => {
-    setDownloadPct(0);
-    await downloadVoice(id, (pct) => setDownloadPct(pct));
-    setInstalledVoiceIds((prev) => {
-      const updated = Array.from(new Set([...prev, id]));
-      localStorage.setItem(
-        "echoread_installed_voices",
-        JSON.stringify(updated),
-      );
-      return updated;
-    });
-    setVoiceReady(true);
-    setDownloadPct(null);
-  };
+  const {
+    currentPage,
+    currentLine,
+    isPlaying,
+    speed,
+    setSpeed,
+    togglePlay,
+    jumpTo,
+  } = useReader(
+    activeBook?.id || null,
+    ttsPages || [],
+    activeBook?.currentPage || 0,
+    activeBook?.currentLine || 0,
+    currentActiveVoiceId,
+  );
 
   const loadBooks = async () => {
     const list = await getAllBooks();
@@ -334,64 +232,26 @@ export default function App() {
       const landscapeShort = window.matchMedia(
         "(orientation: landscape) and (max-height: 560px)",
       ).matches;
-      const compact = mobile || landscapeShort;
-      setCompactChrome(compact);
-      if (!compact) setNavbarHidden(false);
+      setCompactChrome(mobile || landscapeShort);
+      if (!mobile && !landscapeShort) setNavbarHidden(false);
     };
-
     updateChrome();
     window.addEventListener("resize", updateChrome);
-    window.addEventListener("orientationchange", updateChrome);
-    return () => {
-      window.removeEventListener("resize", updateChrome);
-      window.removeEventListener("orientationchange", updateChrome);
-    };
+    return () => window.removeEventListener("resize", updateChrome);
   }, []);
 
-  const handleDeleteBook = async (id: string) => {
-    await deleteBook(id);
-    if (activeBook?.id === id) {
-      setActiveBook(null);
-    }
-    await loadBooks();
-  };
+  useEffect(() => {
+    return subscribeTtsStatus(setEngineStatus);
+  }, []);
 
-  const handleInstallVoice = async () => {
-    setDownloadPct(0);
-    await downloadVoice(DEFAULT_PIPER_VOICE, (pct) => setDownloadPct(pct));
-    setVoiceReady(true);
-    setDownloadPct(null);
-  };
+  useEffect(() => {
+    updateMediaSessionState(isPlaying);
+    if (!isPlaying) releaseScreenWakeLock();
+  }, [isPlaying]);
 
-  const ttsPages = useMemo(() => {
-    if (!activeBook?.pages) return [];
-    return activeBook.pages.map((page) =>
-      page.filter((line) => line.trim().length > 0),
-    );
-  }, [activeBook?.pages]);
-
-  const {
-    currentPage,
-    currentLine,
-    isPlaying,
-    speed,
-    setSpeed,
-    togglePlay,
-    jumpTo,
-  } = useReader(
-    activeBook?.id || null,
-    ttsPages || [],
-    activeBook?.currentPage || 0,
-    activeBook?.currentLine || 0,
-    currentActiveVoiceId,
-  );
-  // Track if user explicitly initiated/tapped playback highlighting
-  // const [showActiveLineHighlight, setShowActiveLineHighlight] = useState(false);
   const handleTogglePlay = useCallback(async () => {
     if (!activeBook || !voiceReady) return;
-
     if (!isPlaying) {
-      // setShowActiveLineHighlight(true);
       await ensureAudioUnlocked();
       await requestScreenWakeLock();
     } else {
@@ -406,8 +266,8 @@ export default function App() {
       jumpTo(currentPage, currentLine - 1);
     } else if (currentPage > 0) {
       const prevPage = currentPage - 1;
-      const prevPageLines = ttsPages[prevPage] || [];
-      jumpTo(prevPage, Math.max(0, prevPageLines.length - 1));
+      const prevLines = ttsPages[prevPage] || [];
+      jumpTo(prevPage, Math.max(0, prevLines.length - 1));
     }
   }, [activeBook, currentLine, currentPage, jumpTo, ttsPages]);
 
@@ -421,6 +281,7 @@ export default function App() {
     }
   }, [activeBook, currentLine, currentPage, jumpTo, ttsPages]);
 
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -428,7 +289,6 @@ export default function App() {
         e.target instanceof HTMLTextAreaElement
       )
         return;
-
       if (e.code === "Space") {
         e.preventDefault();
         handleTogglePlay();
@@ -440,241 +300,37 @@ export default function App() {
         handlePrevLine();
       }
     };
-
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleTogglePlay, handleNextLine, handlePrevLine]);
 
-  const handlePageJump = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!activeBook) return;
-
-    const targetPage = parseInt(gotoInput, 10);
-    if (
-      !isNaN(targetPage) &&
-      targetPage >= 1 &&
-      targetPage <= activeBook.totalPages
-    ) {
-      jumpTo(targetPage - 1, 0);
-    } else {
-      setGotoInput(String(currentPage + 1));
-    }
-  };
-
+  // Page synchronization
   useEffect(() => {
     if (activeBook) setGotoInput(String(currentPage + 1));
   }, [currentPage, activeBook]);
 
-  const ttsLines = ttsPages[currentPage] || [];
-  const displayedLines = activeBook?.displayPages?.[currentPage] || [];
-
-  const { displayToSentence } = useMemo(
-    () => mapDisplayToSentences(displayedLines, ttsLines),
-    [displayedLines, ttsLines],
-  );
-
-  const handleDisplayLineClick = async (displayIdx: number) => {
-    // If user is selecting text to highlight, don't trigger TTS line jump
-    const selection = window.getSelection();
-    if (
-      selection &&
-      !selection.isCollapsed &&
-      selection.toString().trim().length > 0
-    ) {
-      return;
-    }
-
-    const sentenceIndices = displayToSentence[displayIdx] || [];
-    if (sentenceIndices.length === 0) return;
-
-    // Enable playback line highlight on explicit tap/click
-    // setShowActiveLineHighlight(true);
-    await ensureAudioUnlocked();
-    jumpTo(currentPage, sentenceIndices[0]);
-  };
-
-  const readerFont = getReaderFont(fontId);
-
-  const handleAddOrUploadBook = async (file: File) => {
-    const cleanTitle = file.name.replace(/\.pdf$/i, "");
-    const existingBook = books.find(
-      (b) => b.title.toLowerCase() === cleanTitle.toLowerCase(),
-    );
-
-    if (existingBook) {
-      const shouldReplace = window.confirm(
-        `"${cleanTitle}" already exists on your shelf.\n\nDo you want to replace it? (Progress will reset to Page 1)`,
+  // Chapter Parsing Fallback
+  useEffect(() => {
+    if (!activeBook) return setActiveChapters([]);
+    if (activeBook.chapters?.length)
+      return setActiveChapters(activeBook.chapters);
+    if (activeBook.displayPages?.length) {
+      setTimeout(
+        () =>
+          setActiveChapters(
+            parseChaptersFromDisplayPages(activeBook.displayPages!),
+          ),
+        0,
       );
-      if (!shouldReplace) return;
-
-      const extracted = await extractPdfPages(file);
-      const replacedBook: BookDoc = {
-        ...existingBook,
-        pages: extracted.pages,
-        displayPages: extracted.displayPages,
-        totalPages: extracted.pages.length,
-        coverUrl: extracted.coverUrl,
-        chapters: extracted?.chapters,
-        currentPage: 0,
-        currentLine: 0,
-        updatedAt: Date.now(),
-      };
-
-      await saveBook(replacedBook);
-      await loadBooks();
-      setActiveBook(replacedBook);
-      return;
-    }
-
-    const extracted = await extractPdfPages(file);
-    const newBook: BookDoc = {
-      id: `${cleanTitle}_${Date.now()}`,
-      title: cleanTitle,
-      pages: extracted.pages,
-      displayPages: extracted.displayPages,
-      totalPages: extracted.pages.length,
-      coverUrl: extracted.coverUrl,
-      chapters: extracted.chapters,
-      currentPage: 0,
-      currentLine: 0,
-      updatedAt: Date.now(),
-    };
-
-    await saveBook(newBook);
-    await loadBooks();
-    setActiveBook(newBook);
-  };
-
-  useEffect(() => {
-    return subscribeTtsStatus((status) => {
-      setEngineStatus(status);
-    });
-  }, []);
-
-  useEffect(() => {
-    updateMediaSessionState(isPlaying);
-    if (!isPlaying) releaseScreenWakeLock();
-  }, [isPlaying]);
-
-  useEffect(() => {
-    if (!activeBook) return;
-
-    setupMediaSession({
-      title: activeBook.title,
-      artist: `EchoRead (${currentVoiceInfo?.name || "Piper TTS"})`,
-      album: `Page ${currentPage + 1} of ${activeBook.totalPages}`,
-      onPlay: handleTogglePlay,
-      onPause: handleTogglePlay,
-      onNext: () => {
-        if (currentPage < activeBook.totalPages - 1) jumpTo(currentPage + 1, 0);
-      },
-      onPrev: () => {
-        if (currentPage > 0) jumpTo(currentPage - 1, 0);
-      },
-    });
-  }, [
-    activeBook,
-    currentPage,
-    currentActiveVoiceId,
-    handleTogglePlay,
-    currentVoiceInfo,
-    jumpTo,
-  ]);
-
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const readerContainerRef = useRef<HTMLElement | null>(null);
-
-  const toggleFullscreen = async () => {
-    const next = !isFullscreen;
-    setIsFullscreen(next);
-
-    if (document.fullscreenEnabled) {
-      try {
-        if (next && !document.fullscreenElement) {
-          await readerContainerRef.current?.requestFullscreen?.();
-        } else if (!next && document.fullscreenElement) {
-          await document.exitFullscreen?.();
-        }
-      } catch {}
-    }
-  };
-
-  useEffect(() => {
-    const handleFsChange = () =>
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    document.addEventListener("fullscreenchange", handleFsChange);
-    return () =>
-      document.removeEventListener("fullscreenchange", handleFsChange);
-  }, []);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-
-    const activeDisplayIdx = displayedLines.findIndex((_, i) =>
-      (displayToSentence[i] || []).includes(currentLine),
-    );
-
-    if (activeDisplayIdx === -1) return;
-
-    const container = scrollContainerRef.current;
-    const targetElement = document.getElementById(
-      `reader-line-${activeDisplayIdx}`,
-    );
-
-    if (container && targetElement) {
-      const containerRect = container.getBoundingClientRect();
-      const targetRect = targetElement.getBoundingClientRect();
-      const targetTop =
-        targetRect.top - containerRect.top + container.scrollTop;
-      const centeredOffset =
-        targetTop - container.clientHeight / 2 + targetRect.height / 2;
-
-      container.scrollTo({
-        top: Math.max(0, centeredOffset),
-        behavior: "smooth",
-      });
-    }
-  }, [currentLine, currentPage, isPlaying, displayedLines, displayToSentence]);
-
-  const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
-  const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
-
-  useEffect(() => {
-    if (!activeBook) {
-      setActiveChapters([]);
-      return;
-    }
-
-    if (activeBook.chapters && activeBook.chapters.length > 0) {
-      setActiveChapters(activeBook.chapters);
-      return;
-    }
-
-    if (activeBook.displayPages && activeBook.displayPages.length > 0) {
-      setTimeout(() => {
-        const parsed = parseChaptersFromDisplayPages(activeBook.displayPages!);
-        setActiveChapters(parsed);
-      }, 0);
     }
   }, [activeBook]);
 
-  const currentChapter = useMemo(() => {
-    if (activeChapters.length === 0) return null;
-    return [...activeChapters]
-      .reverse()
-      .find((c) => c.pageIndex <= currentPage);
-  }, [activeChapters, currentPage]);
-
-  const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
-  const [sleepMins, setSleepMins] = useState<number | null>(null);
-  const targetChapterPage = useRef<number | null>(null);
-
+  // Sleep Timer Interval Watcher
   useEffect(() => {
     if (typeof sleepMode !== "number") return;
     const interval = setInterval(() => {
       setSleepMins((prev) => {
-        if (prev === null) return null;
-        if (prev <= 1) {
+        if (!prev || prev <= 1) {
           if (isPlaying) handleTogglePlay();
           setSleepMode(null);
           return null;
@@ -685,16 +341,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, [sleepMode, isPlaying, handleTogglePlay]);
 
+  // Sleep Timer Chapter Boundary Watcher
   useEffect(() => {
-    if (sleepMode === "chapter" && activeBook) {
-      if (
-        targetChapterPage.current !== null &&
-        currentPage >= targetChapterPage.current
-      ) {
-        if (isPlaying) handleTogglePlay();
-        setSleepMode(null);
-        targetChapterPage.current = null;
-      }
+    if (
+      sleepMode === "chapter" &&
+      activeBook &&
+      targetChapterPage.current !== null &&
+      currentPage >= targetChapterPage.current
+    ) {
+      if (isPlaying) handleTogglePlay();
+      setSleepMode(null);
+      targetChapterPage.current = null;
     }
   }, [currentPage, sleepMode, activeBook, isPlaying, handleTogglePlay]);
 
@@ -712,27 +369,9 @@ export default function App() {
     }
   };
 
-  const estimatedMinsLeft = activeBook
-    ? Math.ceil(((activeBook.totalPages - currentPage) * 1.5) / speed)
-    : 0;
-  const timeLeftStr =
-    estimatedMinsLeft > 60
-      ? `${Math.floor(estimatedMinsLeft / 60)}h ${estimatedMinsLeft % 60}m left`
-      : `${estimatedMinsLeft}m left`;
-
-  // === MULTI-LINE SELECTION & 6-COLOR HIGHLIGHTING ===
-  const [selectionParams, setSelectionParams] = useState<SelectionData | null>(
-    null,
-  );
-  const [showColorPicker, setShowColorPicker] = useState(false);
-  const [dictWord, setDictWord] = useState<string | null>(null);
-  const [dictData, setDictData] = useState<any>(null);
-  const [dictLoading, setDictLoading] = useState(false);
-
   const lookupWord = async (word: string) => {
     const cleanWord = word.replace(/[.,;!?()""'’‘“”]/g, "").trim();
     if (!cleanWord) return;
-
     setDictWord(cleanWord);
     setDictLoading(true);
     setDictData(null);
@@ -740,7 +379,7 @@ export default function App() {
       const res = await fetch(
         `https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`,
       );
-      if (!res.ok) throw new Error("Not found");
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setDictData(data[0]);
     } catch {
@@ -750,126 +389,8 @@ export default function App() {
     }
   };
 
-  // === INSTANT MULTI-LINE SELECTION DETECTION ===
-  const handleTextSelection = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      setSelectionParams(null);
-      setShowColorPicker(false);
-      return;
-    }
-
-    const fullSelectedText = sel.toString().trim();
-    if (!fullSelectedText) {
-      setSelectionParams(null);
-      setShowColorPicker(false);
-      return;
-    }
-
-    const range = sel.getRangeAt(0);
-    const startLineEl = (
-      range.startContainer.nodeType === Node.ELEMENT_NODE
-        ? (range.startContainer as Element)
-        : range.startContainer.parentElement
-    )?.closest(".reader-line");
-    const endLineEl = (
-      range.endContainer.nodeType === Node.ELEMENT_NODE
-        ? (range.endContainer as Element)
-        : range.endContainer.parentElement
-    )?.closest(".reader-line");
-
-    if (!startLineEl || !endLineEl) {
-      setSelectionParams(null);
-      setShowColorPicker(false);
-      return;
-    }
-
-    const startIdx = parseInt(startLineEl.id.replace("reader-line-", ""), 10);
-    const endIdx = parseInt(endLineEl.id.replace("reader-line-", ""), 10);
-    const minIdx = Math.min(startIdx, endIdx);
-    const maxIdx = Math.max(startIdx, endIdx);
-
-    const lineEntries: { lineIdx: number; text: string }[] = [];
-
-    for (let i = minIdx; i <= maxIdx; i++) {
-      const lineEl = document.getElementById(`reader-line-${i}`);
-      if (!lineEl) continue;
-
-      const lineText = lineEl.textContent || "";
-      if (!lineText) continue;
-
-      const lineRange = document.createRange();
-      lineRange.selectNodeContents(lineEl);
-
-      const testRange = range.cloneRange();
-      if (
-        testRange.compareBoundaryPoints(Range.START_TO_END, lineRange) > 0 &&
-        testRange.compareBoundaryPoints(Range.END_TO_START, lineRange) < 0
-      ) {
-        const subRange = document.createRange();
-        if (
-          testRange.compareBoundaryPoints(Range.START_TO_START, lineRange) <= 0
-        ) {
-          subRange.setStart(lineRange.startContainer, lineRange.startOffset);
-        } else {
-          subRange.setStart(testRange.startContainer, testRange.startOffset);
-        }
-
-        if (testRange.compareBoundaryPoints(Range.END_TO_END, lineRange) >= 0) {
-          subRange.setEnd(lineRange.endContainer, lineRange.endOffset);
-        } else {
-          subRange.setEnd(testRange.endContainer, testRange.endOffset);
-        }
-
-        const partialText = subRange.toString().trim();
-        if (partialText) {
-          lineEntries.push({ lineIdx: i, text: partialText });
-        }
-      }
-    }
-
-    if (lineEntries.length === 0) {
-      setSelectionParams(null);
-      setShowColorPicker(false);
-      return;
-    }
-
-    // Accurate coordinates across desktop and mobile
-    const clientRects = range.getClientRects();
-    const rect =
-      clientRects.length > 0
-        ? clientRects[clientRects.length - 1]
-        : range.getBoundingClientRect();
-
-    lastSelectionTimeRef.current = Date.now();
-    setSelectionParams({ rect, text: fullSelectedText, lineEntries });
-  }, []);
-
-  // Listen directly to document selection changes for immediate response
-  useEffect(() => {
-    let timeoutId: number;
-    const onSelectionChange = () => {
-      clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(handleTextSelection, 60);
-    };
-
-    const onMouseUp = () => {
-      setTimeout(handleTextSelection, 10);
-    };
-
-    document.addEventListener("selectionchange", onSelectionChange);
-    document.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener("selectionchange", onSelectionChange);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [handleTextSelection]);
-
   const handleApplyColor = async (color: string) => {
     if (!activeBook || !selectionParams) return;
-
     const newHighlights = { ...(activeBook.highlights || {}) };
     const highlightId = `hl_${Date.now()}`;
     const updates = selectionParams.lineEntries.map((entry) => {
@@ -886,28 +407,54 @@ export default function App() {
 
     setActiveBook({ ...activeBook, highlights: newHighlights });
     await applyMultiLineHighlight(activeBook.id, updates);
-
-    window.getSelection()?.removeAllRanges();
-    setSelectionParams(null);
-    setShowColorPicker(false);
+    clearSelection();
   };
+
+  const ttsLines = ttsPages[currentPage] || [];
+  const displayedLines = activeBook?.displayPages?.[currentPage] || [];
+  const { displayToSentence } = useMemo(
+    () => mapDisplayToSentences(displayedLines, ttsLines),
+    [displayedLines, ttsLines],
+  );
+
+  const handleDisplayLineClick = async (displayIdx: number) => {
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+    const sentenceIndices = displayToSentence[displayIdx] || [];
+    if (!sentenceIndices.length) return;
+    await ensureAudioUnlocked();
+    jumpTo(currentPage, sentenceIndices[0]);
+  };
+
+  const currentChapter = useMemo(() => {
+    if (!activeChapters.length) return null;
+    return [...activeChapters]
+      .reverse()
+      .find((c) => c.pageIndex <= currentPage);
+  }, [activeChapters, currentPage]);
+
+  const estimatedMinsLeft = activeBook
+    ? Math.ceil(((activeBook.totalPages - currentPage) * 1.5) / speed)
+    : 0;
+  const timeLeftStr =
+    estimatedMinsLeft > 60
+      ? `${Math.floor(estimatedMinsLeft / 60)}h ${estimatedMinsLeft % 60}m left`
+      : `${estimatedMinsLeft}m left`;
+  const readerFont = getReaderFont(fontId);
+  const formattedActiveTitle = activeBook
+    ? cleanBookTitle(activeBook.title)
+    : "";
 
   return (
     <div
       className="app-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col font-sans"
       data-theme={theme}
       onClick={() => {
-        // Prevent instant dismissal if selection was created within the last 250ms (mouse-up click)
-        if (Date.now() - lastSelectionTimeRef.current < 250) {
-          return;
-        }
-        if (selectionParams) {
-          window.getSelection()?.removeAllRanges();
-          setSelectionParams(null);
-          setShowColorPicker(false);
-        }
+        if (Date.now() - lastSelectionTimeRef.current < 250) return;
+        if (selectionParams) clearSelection();
       }}
     >
+      {/* Header */}
       <header
         className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""}`}
       >
@@ -918,22 +465,39 @@ export default function App() {
               ref={fileInputRef}
               accept="application/pdf"
               className="hidden"
-              onChange={(e) => {
+              onChange={async (e) => {
                 const file = e.target.files?.[0];
-                if (file) handleAddOrUploadBook(file);
+                if (!file) return;
+                const cleanTitle = file.name.replace(/\.pdf$/i, "");
+                const extracted = await extractPdfPages(file);
+                const newBook: BookDoc = {
+                  id: `${cleanTitle}_${Date.now()}`,
+                  title: cleanTitle,
+                  pages: extracted.pages,
+                  displayPages: extracted.displayPages,
+                  totalPages: extracted.pages.length,
+                  coverUrl: extracted.coverUrl,
+                  chapters: extracted.chapters,
+                  currentPage: 0,
+                  currentLine: 0,
+                  updatedAt: Date.now(),
+                };
+                await saveBook(newBook);
+                await loadBooks();
+                setActiveBook(newBook);
               }}
             />
             {!activeBook && (
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="app-btn active:scale-95 text-xs font-semibold px-3 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                className="app-btn active:scale-95 text-xs font-semibold px-3 py-1 rounded-md transition flex items-center gap-1.5 cursor-pointer"
               >
                 <span>📁</span> Choose PDF
               </button>
             )}
             <span
-              className="text-xs font-bold truncate block w-full sm:w-auto sm:max-w-[160px] md:max-w-xs select-none"
-              title={formattedActiveTitle || "No file selected"}
+              className="text-xs font-bold truncate block w-full sm:w-auto sm:max-w-[160px] md:max-w-xs"
+              title={formattedActiveTitle}
             >
               {formattedActiveTitle || (
                 <span className="font-medium app-muted">No file selected</span>
@@ -943,41 +507,40 @@ export default function App() {
 
           {activeBook && (
             <form
-              onSubmit={handlePageJump}
-              className="app-control flex items-center justify-between gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg w-full sm:w-auto"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const p = parseInt(gotoInput, 10);
+                if (!isNaN(p) && p >= 1 && p <= activeBook.totalPages)
+                  jumpTo(p - 1, 0);
+              }}
+              className="app-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
             >
               <button
                 type="button"
                 disabled={currentPage === 0}
                 onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                className="px-2 py-1 text-xs app-muted hover:opacity-80 disabled:opacity-20 cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1"
+                className="px-2 py-1 text-xs app-muted disabled:opacity-20 cursor-pointer"
               >
-                <span>◀</span>
-                <span>Prev</span>
+                ◀ Prev
               </button>
-
-              <div className="flex items-center gap-1 shrink-0 whitespace-nowrap">
-                <span className="app-muted text-xs select-none">Pg</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={activeBook.totalPages}
-                  value={gotoInput}
-                  onChange={(e) => setGotoInput(e.target.value)}
-                  onBlur={handlePageJump}
-                  className="app-input w-11 rounded text-center text-xs font-bold py-0.5 px-0.5 font-mono"
-                />
-                <span className="text-xs app-muted font-normal select-none">
-                  / {activeBook.totalPages}
-                </span>
-                <button
-                  type="submit"
-                  className="app-btn text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer ml-0.5 shrink-0"
-                >
-                  Go
-                </button>
-              </div>
-
+              <span className="app-muted text-xs">Pg</span>
+              <input
+                type="number"
+                min={1}
+                max={activeBook.totalPages}
+                value={gotoInput}
+                onChange={(e) => setGotoInput(e.target.value)}
+                className="app-input w-11 rounded text-center text-xs font-bold py-0.5"
+              />
+              <span className="text-xs app-muted">
+                / {activeBook.totalPages}
+              </span>
+              <button
+                type="submit"
+                className="app-btn text-[11px] font-semibold px-2 py-0.5 rounded cursor-pointer"
+              >
+                Go
+              </button>
               <button
                 type="button"
                 disabled={currentPage >= activeBook.totalPages - 1}
@@ -987,108 +550,19 @@ export default function App() {
                     0,
                   )
                 }
-                className="px-2 py-1 text-xs app-muted hover:opacity-80 disabled:opacity-20 cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1"
+                className="px-2 py-1 text-xs app-muted disabled:opacity-20 cursor-pointer"
               >
-                <span>Next</span>
-                <span>▶</span>
+                Next ▶
               </button>
             </form>
           )}
 
-          <div className="app-control flex flex-col md:flex-row md:items-center gap-2 px-2.5 py-2 rounded-lg w-full md:w-auto min-w-0 max-w-full">
-            {!voiceReady ? (
-              <button
-                onClick={handleInstallVoice}
-                disabled={downloadPct !== null}
-                className="app-btn text-xs font-semibold px-3 py-2 rounded cursor-pointer w-full md:w-auto"
-              >
-                {downloadPct !== null
-                  ? `Loading Voice (${downloadPct}%)`
-                  : "Load Voice (63MB)"}
-              </button>
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5 w-full md:w-auto min-w-0">
-                  <div className="flex items-center rounded-md border border-inherit bg-black/10 p-0.5 flex-1 md:flex-initial min-w-0">
-                    <button
-                      type="button"
-                      disabled={!isMaleReady}
-                      onClick={() => setActiveGender("male")}
-                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none disabled:opacity-40 ${
-                        activeGender === "male"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
-                          : "app-muted hover:opacity-100"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          activeGender === "male"
-                            ? "bg-black animate-pulse"
-                            : "bg-transparent"
-                        }`}
-                      />
-                      <span className="truncate">{maleLabel}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!isFemaleReady) {
-                          setIsVoiceModalOpen(true);
-                        } else {
-                          setActiveGender("female");
-                        }
-                      }}
-                      className={`flex-1 md:flex-initial min-w-0 text-[11px] font-semibold px-2.5 py-1 rounded transition cursor-pointer flex items-center justify-center gap-1.5 select-none ${
-                        activeGender === "female"
-                          ? "bg-amber-400 text-black font-bold shadow-xs"
-                          : "app-muted hover:opacity-100"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          activeGender === "female"
-                            ? "bg-black animate-pulse"
-                            : "bg-transparent"
-                        }`}
-                      />
-                      <span className="truncate">{femaleLabel}</span>
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={!canToggleVoices}
-                    onClick={handleToggleVoiceGender}
-                    title={
-                      canToggleVoices
-                        ? "Switch Voice"
-                        : "Download both male and female voices to toggle"
-                    }
-                    className="app-btn text-xs font-semibold px-2 py-1 rounded-md transition cursor-pointer shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    ⇄
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsVoiceModalOpen(true)}
-                    title="Open Voice Library"
-                    className="app-btn text-xs font-semibold px-2 py-1 rounded-md transition cursor-pointer shrink-0 flex items-center"
-                  >
-                    <span>⚙️</span>
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2 w-full sm:w-auto shrink-0">
+          <div className="flex items-center gap-2">
             {compactChrome && (
               <button
                 type="button"
                 onClick={() => setNavbarHidden(true)}
-                className="app-btn text-[11px] font-semibold px-2.5 py-1.5 cursor-pointer shrink-0"
+                className="app-btn text-[11px] font-semibold px-2.5 py-1.5 cursor-pointer"
               >
                 Hide nav
               </button>
@@ -1105,371 +579,142 @@ export default function App() {
         </div>
       </header>
 
+      {/* Floating Mobile Controls */}
       {compactChrome && activeBook && !selectionParams && (
-        <div
-          className={`fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-40 transition-all duration-300 ${
-            navbarHidden
-              ? "translate-y-24 opacity-0 pointer-events-none"
-              : "translate-y-0 opacity-100"
-          }`}
-        >
-          <div className="app-panel shadow-2xl rounded-3xl p-4 flex flex-col gap-3 border border-[var(--panel-border)] backdrop-blur-xl bg-opacity-95 dark:bg-opacity-95">
-            <div className="flex flex-col items-center text-center px-4">
-              <h4 className="text-sm font-bold text-[var(--app-text)] truncate w-full">
-                {formattedActiveTitle}
-              </h4>
-              <div className="flex items-center gap-2 mt-0.5 justify-center w-full">
-                <p className="text-[11px] text-[var(--accent)] font-semibold truncate">
-                  {currentChapter?.title || `Page ${currentPage + 1}`}
-                </p>
-                <span className="px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[9px] uppercase font-bold tracking-wider opacity-80">
-                  {timeLeftStr}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-center gap-3 sm:gap-4 mt-1">
-              <button
-                onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                disabled={currentPage === 0}
-                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
-              >
-                ⏮
-              </button>
-              <button
-                onClick={handlePrevLine}
-                disabled={currentPage === 0 && currentLine === 0}
-                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
-              >
-                ⏪
-              </button>
-
-              <button
-                onClick={handleTogglePlay}
-                disabled={!voiceReady}
-                className={`w-14 h-14 flex items-center justify-center rounded-full shadow-lg cursor-pointer transition shrink-0 ${
-                  isPlaying ? "app-pause" : "app-play"
-                } disabled:opacity-25`}
-              >
-                {engineStatus !== "idle" ? (
-                  <span className="inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                ) : isPlaying ? (
-                  <span className="text-xl">⏸</span>
-                ) : (
-                  <span className="text-xl ml-1">▶</span>
-                )}
-              </button>
-
-              <button
-                onClick={handleNextLine}
-                disabled={
-                  currentPage >= activeBook.totalPages - 1 &&
-                  currentLine >= ttsLines.length - 1
-                }
-                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
-              >
-                ⏩
-              </button>
-              <button
-                onClick={() =>
-                  jumpTo(
-                    Math.min(activeBook.totalPages - 1, currentPage + 1),
-                    0,
-                  )
-                }
-                disabled={currentPage >= activeBook.totalPages - 1}
-                className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
-              >
-                ⏭
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 px-3 mt-1">
-              <span className="text-[10px] app-muted uppercase tracking-wider font-bold">
-                Speed
-              </span>
-              <input
-                type="range"
-                min="0.5"
-                max="2.0"
-                step="0.1"
-                value={speed}
-                onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                className="flex-1 accent-[var(--accent)] cursor-pointer h-1 rounded"
-              />
-              <span className="text-xs app-accent font-mono font-bold w-8 text-right tabular-nums">
-                {speed.toFixed(1)}×
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {navbarHidden && compactChrome && !selectionParams && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
-          <button
-            onClick={() => setNavbarHidden(false)}
-            className="app-panel shadow-2xl border border-[var(--panel-border)] backdrop-blur-xl bg-opacity-90 dark:bg-opacity-90 px-5 py-2.5 rounded-full text-xs font-bold text-[var(--app-text)] flex items-center gap-2 cursor-pointer transition active:scale-95 hover:bg-[var(--btn-hover)]"
-          >
-            <span className="text-[14px]">👀</span>
-            <span className="tracking-wide uppercase text-[10px]">
-              Show Controls
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Floating Selection Toolbar & 6-Color Picker */}
-      {selectionParams && (
-        <div
-          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-2xl p-2 animate-in fade-in zoom-in-95 duration-150"
-          style={
-            compactChrome
-              ? {
-                  bottom: "24px",
-                  left: "50%",
-                  transform: "translateX(-50%)",
-                  maxWidth: "90vw",
-                }
-              : {
-                  top: Math.min(
-                    window.innerHeight - 60,
-                    selectionParams.rect.bottom + 8,
-                  ),
-                  left: Math.max(
-                    10,
-                    Math.min(
-                      window.innerWidth - 250,
-                      selectionParams.rect.left +
-                        selectionParams.rect.width / 2 -
-                        100,
-                    ),
-                  ),
-                }
+        <MobileFloatingPlayer
+          title={formattedActiveTitle}
+          chapterTitle={currentChapter?.title}
+          timeLeftStr={timeLeftStr}
+          navbarHidden={navbarHidden}
+          isPlaying={isPlaying}
+          engineStatus={engineStatus}
+          voiceReady={voiceReady}
+          speed={speed}
+          currentPage={currentPage}
+          totalPages={activeBook.totalPages}
+          currentLine={currentLine}
+          totalLines={ttsLines.length}
+          onSpeedChange={setSpeed}
+          onTogglePlay={handleTogglePlay}
+          onPrevPage={() => jumpTo(Math.max(0, currentPage - 1), 0)}
+          onNextPage={() =>
+            jumpTo(Math.min(activeBook.totalPages - 1, currentPage + 1), 0)
           }
-          onClick={(e) => e.stopPropagation()}
-        >
-          {!showColorPicker ? (
-            <>
-              {selectionParams.text.split(/\s+/).length <= 3 && (
-                <button
-                  onClick={() => {
-                    lookupWord(selectionParams.text);
-                    window.getSelection()?.removeAllRanges();
-                    setSelectionParams(null);
-                  }}
-                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-xl transition cursor-pointer"
-                >
-                  📖 Define
-                </button>
-              )}
-              <button
-                onClick={() => setShowColorPicker(true)}
-                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
-              >
-                <span className="w-3.5 h-3.5 rounded-full bg-yellow-300"></span>{" "}
-                Highlight
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-2 px-1 py-0.5">
-              {HIGHLIGHT_COLORS.map((col) => (
-                <button
-                  key={col.label}
-                  onClick={() => handleApplyColor(col.value)}
-                  title={col.label}
-                  className={`w-7 h-7 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-sm`}
-                />
-              ))}
-              <button
-                onClick={() => setShowColorPicker(false)}
-                className="ml-1 p-1 text-xs opacity-60 hover:opacity-100 cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          )}
-        </div>
+          onPrevLine={handlePrevLine}
+          onNextLine={handleNextLine}
+          onShowControls={() => setNavbarHidden(false)}
+        />
       )}
 
+      {/* Floating Highlight Toolbar */}
+      {selectionParams && (
+        <HighlightToolbar
+          selectionParams={selectionParams}
+          compactChrome={compactChrome}
+          showColorPicker={showColorPicker}
+          onShowColorPicker={setShowColorPicker}
+          onDefine={lookupWord}
+          onApplyColor={handleApplyColor}
+        />
+      )}
+
+      {/* Main Grid Workspace */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:min-h-0 lg:overflow-hidden">
-        {" "}
         <main
           ref={readerContainerRef}
-          className={`app-panel flex flex-col shadow-xl overflow-hidden transition-all duration-150 relative ${
-            isFullscreen
-              ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
-              : "lg:col-span-8 lg:h-full rounded-lg"
-          }`}
+          className={`app-panel flex flex-col shadow-xl overflow-hidden relative ${isFullscreen ? "fixed inset-0 z-50 w-screen h-[100dvh]" : "lg:col-span-8 lg:h-full rounded-lg"}`}
         >
-          <div className="app-panel-header px-3 sm:px-5 py-2.5 flex items-center justify-between text-xs shrink-0 gap-3 relative z-20">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              {activeBook?.chapters && activeBook.chapters.length > 0 && (
+          {/* Reader Panel Subheader */}
+          <div className="app-panel-header px-4 py-2.5 flex items-center justify-between text-xs shrink-0 relative z-20">
+            <div className="flex items-center gap-2 truncate">
+              {activeBook?.chapters?.length && (
                 <button
-                  type="button"
                   onClick={() => setIsChapterDrawerOpen(true)}
-                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded flex items-center gap-1.5 cursor-pointer shrink-0"
-                  title="Table of Contents"
+                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1"
                 >
-                  <span className="text-sm">📑</span>
-                  <span className="hidden sm:inline">Chapters</span>
+                  📑 <span className="hidden sm:inline">Chapters</span>
                 </button>
               )}
-
               <span className="font-semibold truncate">
                 {activeBook
                   ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                   : "Document View"}
                 {currentChapter && (
-                  <span className="ml-2 font-normal opacity-70 hidden md:inline">
+                  <span className="ml-2 opacity-70 hidden md:inline">
                     • {currentChapter.title}
-                  </span>
-                )}
-                {activeBook && (
-                  <span className="ml-2 px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[10px] uppercase font-bold tracking-wider opacity-80 hidden md:inline-block">
-                    ⏱ {timeLeftStr}
                   </span>
                 )}
               </span>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              {/* Sleep Timer Trigger */}
               {activeBook && (
-                <div className="relative group flex items-center shrink-0">
-                  <button
-                    type="button"
-                    className={`app-btn text-[11px] font-semibold px-2 py-1.5 rounded-md transition flex items-center gap-1.5 cursor-pointer ${
-                      sleepMode
-                        ? "app-accent shadow-sm"
-                        : "border border-inherit"
-                    }`}
-                  >
-                    <span>💤</span>
-                    <span>
-                      {sleepMins
-                        ? `${sleepMins}m`
-                        : sleepMode === "chapter"
-                          ? "Chap"
-                          : "Timer"}
-                    </span>
+                <div className="relative group">
+                  <button className="app-btn text-[11px] font-semibold px-2 py-1.5 rounded cursor-pointer">
+                    💤{" "}
+                    {sleepMins
+                      ? `${sleepMins}m`
+                      : sleepMode === "chapter"
+                        ? "Chap"
+                        : "Timer"}
                   </button>
-
-                  <div className="absolute top-full right-0 mt-1 hidden group-hover:flex flex-col bg-[var(--app-bg)] shadow-xl border border-[var(--panel-border)] rounded-md overflow-hidden w-32">
+                  <div className="absolute top-full right-0 mt-1 hidden group-hover:flex flex-col app-panel border rounded-md shadow-xl w-32 z-50">
                     {[15, 30, 60].map((m) => (
                       <button
                         key={m}
                         onClick={() => startSleepTimer(m)}
-                        className="px-3 py-2 text-xs font-medium text-left hover:bg-black/10 dark:hover:bg-white/10 transition cursor-pointer"
+                        className="px-3 py-1.5 text-xs text-left hover:bg-black/10 cursor-pointer"
                       >
                         {m} minutes
                       </button>
                     ))}
                     <button
                       onClick={() => startSleepTimer("chapter")}
-                      className="px-3 py-2 text-xs font-medium text-left hover:bg-black/10 dark:hover:bg-white/10 transition cursor-pointer"
+                      className="px-3 py-1.5 text-xs text-left hover:bg-black/10 cursor-pointer"
                     >
                       End of Chapter
                     </button>
-                    {sleepMode && (
-                      <button
-                        onClick={() => setSleepMode(null)}
-                        className="px-3 py-2 text-xs font-bold text-rose-500 text-left hover:bg-rose-500/10 transition cursor-pointer border-t border-[var(--panel-border)]"
-                      >
-                        Cancel Timer
-                      </button>
-                    )}
                   </div>
                 </div>
               )}
-
-              <div className="app-control flex items-center gap-1 px-1.5 py-0.5 rounded-md">
+              {/* Font Sizer */}
+              <div className="app-control flex items-center gap-1 px-1 py-0.5 rounded">
                 <button
-                  type="button"
-                  aria-label="Decrease font size"
-                  disabled={fontSize <= MIN_FONT_SIZE}
-                  onClick={() =>
-                    setFontSize((size) => Math.max(MIN_FONT_SIZE, size - 1))
-                  }
-                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold rounded disabled:opacity-25 cursor-pointer"
+                  onClick={() => setFontSize((s) => Math.max(12, s - 1))}
+                  className="px-1 text-[11px] font-bold cursor-pointer"
                 >
                   A−
                 </button>
-                <span className="app-accent font-mono font-bold w-7 text-center tabular-nums select-none">
+                <span className="font-mono text-xs font-bold w-5 text-center">
                   {fontSize}
                 </span>
                 <button
-                  type="button"
-                  aria-label="Increase font size"
-                  disabled={fontSize >= MAX_FONT_SIZE}
-                  onClick={() =>
-                    setFontSize((size) => Math.min(MAX_FONT_SIZE, size + 1))
-                  }
-                  className="min-w-7 h-6 px-1 flex items-center justify-center text-[11px] font-semibold rounded disabled:opacity-25 cursor-pointer"
+                  onClick={() => setFontSize((s) => Math.min(28, s + 1))}
+                  className="px-1 text-[11px] font-bold cursor-pointer"
                 >
                   A+
                 </button>
               </div>
-
-              <span className="hidden lg:inline app-muted ml-1">
-                {displayedLines.length} lines
-              </span>
-
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                title={
-                  isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
-                }
-                className={`text-xs px-2 py-1.5 rounded-md transition cursor-pointer flex items-center gap-1 shrink-0 ${
-                  isFullscreen
-                    ? "bg-amber-400 text-black font-bold shadow-xs"
-                    : "app-btn border border-inherit"
-                }`}
-              >
-                <span className="text-sm">{isFullscreen ? "🗗" : "⛶"}</span>
-              </button>
             </div>
           </div>
 
+          {/* Reader Scrollable Viewport */}
           <div
             ref={scrollContainerRef}
-            onClick={() => {
-              if (compactChrome) {
-                setNavbarHidden((prev) => !prev);
-              }
-            }}
-            // onMouseUp={handleTextSelection}
-            // onTouchEnd={handleTextSelection}
-            className={`px-3 py-4 sm:px-6 md:p-10 flex-1 min-h-0 overflow-y-auto relative ${isFullscreen ? "h-full max-h-none" : ""}`}
+            className="px-4 py-6 sm:px-8 md:p-10 flex-1 min-h-0 overflow-y-auto relative"
           >
             {activeBook ? (
-              <div
-                className="text-left max-w-3xl mx-auto space-y-2 pb-6"
-                style={{
-                  fontFamily: readerFont.cssFamily,
-                  fontSize: `${fontSize}px`,
-                  lineHeight: 1.7,
-                }}
-              >
-                {displayedLines.map((line, idx) => {
-                  const sentenceIndices = displayToSentence[idx] || [];
-                  const isCurrent = sentenceIndices.includes(currentLine);
-                  const lineState = isCurrent ? "is-current" : "is-pending";
-                  const hlItems =
-                    activeBook.highlights?.[`${currentPage}-${idx}`];
-
-                  return (
-                    <MemoizedReaderLine
-                      key={idx}
-                      idx={idx}
-                      lineText={line}
-                      lineState={lineState}
-                      highlights={hlItems}
-                      onLineClick={handleDisplayLineClick}
-                    />
-                  );
-                })}
-              </div>
+              <ReaderTextBody
+                displayedLines={displayedLines}
+                displayToSentence={displayToSentence}
+                currentLine={currentLine}
+                currentPage={currentPage}
+                highlights={activeBook.highlights}
+                fontSize={fontSize}
+                fontFamily={readerFont.cssFamily}
+                onLineClick={handleDisplayLineClick}
+              />
             ) : (
               <div className="h-full flex flex-col items-center justify-center app-muted text-sm space-y-2">
                 <span className="text-2xl">📄</span>
@@ -1478,92 +723,30 @@ export default function App() {
             )}
           </div>
 
+          {/* Desktop Docked Playback Bar */}
           {!compactChrome && activeBook && (
-            <div className="border-t border-[var(--panel-border)] bg-[var(--app-bg)]/90 backdrop-blur px-3 py-2 sm:py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-20">
-              <div className="flex items-center justify-between w-full sm:w-auto gap-3 px-2 sm:px-0 order-2 sm:order-1">
-                <span className="text-[10px] app-muted uppercase tracking-wider font-bold">
-                  Speed
-                </span>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.1"
-                  value={speed}
-                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                  className="w-full sm:w-20 accent-[var(--accent)] cursor-pointer h-1 rounded"
-                />
-                <span className="text-xs app-accent font-mono font-bold w-8 text-right tabular-nums">
-                  {speed.toFixed(1)}×
-                </span>
-              </div>
-
-              <div className="flex items-center justify-center gap-4 sm:gap-6 order-1 sm:order-2 w-full sm:w-auto">
-                <button
-                  onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                  disabled={currentPage === 0}
-                  title="Previous Page (Ctrl + Left)"
-                  className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg cursor-pointer transition flex items-center justify-center"
-                >
-                  ⏮
-                </button>
-                <button
-                  onClick={handlePrevLine}
-                  disabled={currentPage === 0 && currentLine === 0}
-                  title="Previous Line (Left Arrow)"
-                  className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg cursor-pointer transition flex items-center justify-center"
-                >
-                  ⏪
-                </button>
-
-                <button
-                  onClick={handleTogglePlay}
-                  disabled={!voiceReady}
-                  className={`w-12 h-12 flex items-center justify-center rounded-full shadow-lg cursor-pointer transition shrink-0 ${
-                    isPlaying ? "app-pause" : "app-play"
-                  } disabled:opacity-25`}
-                  title="Play / Pause (Spacebar)"
-                >
-                  {engineStatus !== "idle" ? (
-                    <span className="inline-block w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  ) : isPlaying ? (
-                    <span className="text-lg">⏸</span>
-                  ) : (
-                    <span className="text-lg ml-1">▶</span>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleNextLine}
-                  disabled={
-                    currentPage >= activeBook.totalPages - 1 &&
-                    currentLine >= ttsLines.length - 1
-                  }
-                  title="Next Line (Right Arrow)"
-                  className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg cursor-pointer transition flex items-center justify-center"
-                >
-                  ⏩
-                </button>
-                <button
-                  onClick={() =>
-                    jumpTo(
-                      Math.min(activeBook.totalPages - 1, currentPage + 1),
-                      0,
-                    )
-                  }
-                  disabled={currentPage >= activeBook.totalPages - 1}
-                  title="Next Page (Ctrl + Right)"
-                  className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg cursor-pointer transition flex items-center justify-center"
-                >
-                  ⏭
-                </button>
-              </div>
-
-              <div className="hidden sm:block w-[120px] order-3"></div>
-            </div>
+            <DesktopPlaybackDock
+              speed={speed}
+              onSpeedChange={setSpeed}
+              isPlaying={isPlaying}
+              engineStatus={engineStatus}
+              voiceReady={voiceReady}
+              currentPage={currentPage}
+              totalPages={activeBook.totalPages}
+              currentLine={currentLine}
+              totalLines={ttsLines.length}
+              onTogglePlay={handleTogglePlay}
+              onPrevPage={() => jumpTo(Math.max(0, currentPage - 1), 0)}
+              onNextPage={() =>
+                jumpTo(Math.min(activeBook.totalPages - 1, currentPage + 1), 0)
+              }
+              onPrevLine={handlePrevLine}
+              onNextLine={handleNextLine}
+            />
           )}
         </main>
-        <aside className="lg:col-span-4 flex flex-col">
+
+        <aside className="lg:col-span-4 flex flex-col lg:h-full lg:min-h-0 lg:overflow-y-auto">
           <BookShelf
             books={books}
             activeBookId={activeBook?.id || null}
@@ -1572,9 +755,30 @@ export default function App() {
               setActiveBook(book);
               loadBooks();
             }}
-            onDeleteBook={handleDeleteBook}
-            onAddBook={handleAddOrUploadBook}
-            pageSize={5}
+            onDeleteBook={async (id) => {
+              await deleteBook(id);
+              if (activeBook?.id === id) setActiveBook(null);
+              await loadBooks();
+            }}
+            onAddBook={async (file) => {
+              const cleanTitle = file.name.replace(/\.pdf$/i, "");
+              const extracted = await extractPdfPages(file);
+              const newBook: BookDoc = {
+                id: `${cleanTitle}_${Date.now()}`,
+                title: cleanTitle,
+                pages: extracted.pages,
+                displayPages: extracted.displayPages,
+                totalPages: extracted.pages.length,
+                coverUrl: extracted.coverUrl,
+                chapters: extracted.chapters,
+                currentPage: 0,
+                currentLine: 0,
+                updatedAt: Date.now(),
+              };
+              await saveBook(newBook);
+              await loadBooks();
+              setActiveBook(newBook);
+            }}
             theme={theme}
           />
         </aside>
@@ -1587,9 +791,15 @@ export default function App() {
         installedVoiceIds={installedVoiceIds}
         maleVoiceId={maleVoiceId}
         femaleVoiceId={femaleVoiceId}
-        onDownloadVoice={handleDownloadVoiceId}
-        onSetMaleVoice={handleSetMaleVoice}
-        onSetFemaleVoice={handleSetFemaleVoice}
+        onDownloadVoice={async (id) => {
+          setDownloadPct(0);
+          await downloadVoice(id, setDownloadPct);
+          setInstalledVoiceIds((prev) => [...new Set([...prev, id])]);
+          setVoiceReady(true);
+          setDownloadPct(null);
+        }}
+        onSetMaleVoice={setMaleVoiceId}
+        onSetFemaleVoice={setFemaleVoiceId}
       />
 
       <ChapterDrawer
