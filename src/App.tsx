@@ -18,6 +18,10 @@ import {
   type BookDoc,
   deleteBook,
   applyMultiLineHighlight,
+  deleteHighlightById,
+  updateHighlightNote,
+  getReadingStats,
+  type HighlightItem,
 } from "./utils/db";
 import { useReader } from "./hooks/useReader";
 import { useTextSelection } from "./hooks/useTextSelection";
@@ -25,6 +29,8 @@ import { BookShelf, cleanBookTitle } from "./components/BookShelf";
 import { AppearanceMenu } from "./components/AppearanceMenu";
 import { VoiceManagerModal } from "./components/VoiceManagerModal";
 import { ChapterDrawer } from "./components/ChapterDrawer";
+import { AnnotationsDrawer } from "./components/reader/AnnotationsDrawer";
+import { ReadingStatsModal } from "./components/ReadingStatsModal";
 import { ReaderTextBody } from "./components/reader/ReaderTextBody";
 import { HighlightToolbar } from "./components/reader/HighlightToolbar";
 import { DesktopPlaybackDock } from "./components/player/DesktopPlaybackDock";
@@ -121,7 +127,19 @@ export default function App() {
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
+  const [isAnnotationsOpen, setIsAnnotationsOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [streakDays, setStreakDays] = useState(0);
   const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
+
+  // Selected existing highlight popup state (for tap-to-delete/note)
+  const [activeHighlightPopover, setActiveHighlightPopover] = useState<{
+    item: HighlightItem;
+    lineIdx: number;
+    rect: DOMRect;
+  } | null>(null);
+  const [editingPopoverNote, setEditingPopoverNote] = useState(false);
+  const [popoverNoteInput, setPopoverNoteInput] = useState("");
 
   // Sleep Timer States
   const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
@@ -187,6 +205,8 @@ export default function App() {
   const loadBooks = async () => {
     const list = await getAllBooks();
     setBooks(list.sort((a, b) => b.updatedAt - a.updatedAt));
+    const stats = await getReadingStats();
+    setStreakDays(stats.currentStreak || 0);
   };
 
   useEffect(() => {
@@ -387,6 +407,36 @@ export default function App() {
     clearSelection();
   };
 
+  // Direct Highlight Click Handler
+  const handleHighlightClick = useCallback(
+    (item: HighlightItem, lineIdx: number, rect: DOMRect) => {
+      setActiveHighlightPopover({ item, lineIdx, rect });
+      setEditingPopoverNote(false);
+      setPopoverNoteInput(item.note || "");
+    },
+    [],
+  );
+
+  const handleDeleteHighlight = async (highlightId: string) => {
+    if (!activeBook) return;
+    const updated = await deleteHighlightById(activeBook.id, highlightId);
+    setActiveBook({ ...activeBook, highlights: updated });
+    setActiveHighlightPopover(null);
+  };
+
+  const handleSaveHighlightNote = async (highlightId: string, note: string) => {
+    if (!activeBook) return;
+    const updated = await updateHighlightNote(activeBook.id, highlightId, note);
+    setActiveBook({ ...activeBook, highlights: updated });
+    if (activeHighlightPopover?.item.id === highlightId) {
+      setActiveHighlightPopover({
+        ...activeHighlightPopover,
+        item: { ...activeHighlightPopover.item, note },
+      });
+      setEditingPopoverNote(false);
+    }
+  };
+
   const ttsLines = ttsPages[currentPage] || [];
   const displayedLines = activeBook?.displayPages?.[currentPage] || [];
   const { displayToSentence } = useMemo(
@@ -426,6 +476,9 @@ export default function App() {
     <div
       className="app-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col font-sans"
       data-theme={theme}
+      onClick={() => {
+        if (activeHighlightPopover) setActiveHighlightPopover(null);
+      }}
     >
       {/* Header */}
       <header
@@ -531,6 +584,17 @@ export default function App() {
           )}
 
           <div className="flex items-center gap-2">
+            {/* Reading Streak Button */}
+            <button
+              type="button"
+              onClick={() => setIsStatsOpen(true)}
+              className="app-btn text-xs font-bold px-2.5 py-1.5 rounded-md flex items-center gap-1 cursor-pointer transition"
+              title="View Reading Stats & Streaks"
+            >
+              <span>🔥</span>
+              <span>{streakDays}d</span>
+            </button>
+
             {compactChrome && (
               <button
                 type="button"
@@ -592,6 +656,120 @@ export default function App() {
         />
       )}
 
+      {/* Tap Highlight Action Popover */}
+      {activeHighlightPopover && (
+        <div
+          className="fixed z-50 app-panel border border-[var(--panel-border)] shadow-2xl rounded-xl p-2 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-2 max-w-xs"
+          style={
+            compactChrome
+              ? {
+                  bottom: "30px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  width: "88vw",
+                }
+              : {
+                  top: Math.min(
+                    window.innerHeight - 120,
+                    activeHighlightPopover.rect.bottom + 8,
+                  ),
+                  left: Math.max(
+                    12,
+                    Math.min(
+                      window.innerWidth - 280,
+                      activeHighlightPopover.rect.left,
+                    ),
+                  ),
+                  width: "260px",
+                }
+          }
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-1 text-[11px] font-bold border-b border-[var(--panel-border)] pb-1.5">
+            <span className="flex items-center gap-1.5">
+              <span
+                className="w-2.5 h-2.5 rounded-full inline-block"
+                style={{ backgroundColor: activeHighlightPopover.item.color }}
+              />
+              Highlight Options
+            </span>
+            <button
+              onClick={() => setActiveHighlightPopover(null)}
+              className="p-1 opacity-60 hover:opacity-100 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+
+          {editingPopoverNote ? (
+            <div className="space-y-1.5">
+              <textarea
+                value={popoverNoteInput}
+                onChange={(e) => setPopoverNoteInput(e.target.value)}
+                placeholder="Write your note here..."
+                className="app-input w-full rounded p-1.5 text-xs focus:outline-none resize-none"
+                rows={2}
+                autoFocus
+              />
+              <div className="flex justify-end gap-1">
+                <button
+                  onClick={() => setEditingPopoverNote(false)}
+                  className="app-btn text-[10px] px-2 py-0.5 rounded cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() =>
+                    handleSaveHighlightNote(
+                      activeHighlightPopover.item.id,
+                      popoverNoteInput,
+                    )
+                  }
+                  className="app-btn app-accent text-[10px] font-bold px-2 py-0.5 rounded cursor-pointer"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {activeHighlightPopover.item.note && (
+                <div className="text-xs p-1.5 rounded bg-black/5 dark:bg-white/5 border border-inherit">
+                  <span className="text-[10px] font-bold block opacity-60">
+                    Note:
+                  </span>
+                  <p className="whitespace-pre-wrap">
+                    {activeHighlightPopover.item.note}
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-1 pt-1">
+                <button
+                  onClick={() => setEditingPopoverNote(true)}
+                  className="app-btn text-xs font-semibold px-2.5 py-1 rounded flex-1 flex items-center justify-center gap-1 cursor-pointer"
+                >
+                  <span>📝</span>
+                  <span>
+                    {activeHighlightPopover.item.note
+                      ? "Edit Note"
+                      : "Add Note"}
+                  </span>
+                </button>
+                <button
+                  onClick={() =>
+                    handleDeleteHighlight(activeHighlightPopover.item.id)
+                  }
+                  className="app-btn text-xs font-semibold text-rose-500 hover:bg-rose-500/10 px-2.5 py-1 rounded flex items-center justify-center gap-1 cursor-pointer transition"
+                >
+                  <span>🗑️</span>
+                  <span>Delete</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Main Grid Workspace */}
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:min-h-0 lg:overflow-hidden">
         <main
@@ -600,16 +778,28 @@ export default function App() {
         >
           {/* Reader Panel Subheader */}
           <div className="app-panel-header px-4 py-2.5 flex items-center justify-between text-xs shrink-0 relative z-20">
-            <div className="flex items-center gap-2 truncate">
+            <div className="flex items-center gap-1.5 truncate">
               {activeBook?.chapters && activeBook.chapters.length > 0 && (
                 <button
                   onClick={() => setIsChapterDrawerOpen(true)}
-                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1"
+                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1 shrink-0"
+                  title="Table of Contents"
                 >
                   📑 <span className="hidden sm:inline">Chapters</span>
                 </button>
               )}
-              <span className="font-semibold truncate">
+
+              {activeBook && (
+                <button
+                  onClick={() => setIsAnnotationsOpen(true)}
+                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1 shrink-0"
+                  title="View all highlights and notes"
+                >
+                  📝 <span className="hidden sm:inline">Notes</span>
+                </button>
+              )}
+
+              <span className="font-semibold truncate ml-1">
                 {activeBook
                   ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
                   : "Document View"}
@@ -688,6 +878,7 @@ export default function App() {
                 fontSize={fontSize}
                 fontFamily={readerFont.cssFamily}
                 onLineClick={handleDisplayLineClick}
+                onHighlightClick={handleHighlightClick}
               />
             ) : (
               <div className="h-full flex flex-col items-center justify-center app-muted text-sm space-y-2">
@@ -780,6 +971,24 @@ export default function App() {
         chapters={activeChapters}
         currentPage={currentPage}
         onSelectChapter={(pageIdx) => jumpTo(pageIdx, 0)}
+      />
+
+      {/* Annotations & Notes Drawer */}
+      <AnnotationsDrawer
+        isOpen={isAnnotationsOpen}
+        onClose={() => setIsAnnotationsOpen(false)}
+        highlights={activeBook?.highlights}
+        currentPage={currentPage}
+        onJumpTo={(page) => jumpTo(page, 0)}
+        onDeleteHighlight={handleDeleteHighlight}
+        onSaveNote={handleSaveHighlightNote}
+      />
+
+      {/* Reading Stats & Streaks Modal */}
+      <ReadingStatsModal
+        isOpen={isStatsOpen}
+        onClose={() => setIsStatsOpen(false)}
+        books={books}
       />
 
       <DictionaryModal

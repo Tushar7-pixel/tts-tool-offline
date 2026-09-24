@@ -9,18 +9,24 @@ const MemoizedReaderLine = React.memo(
     lineState,
     highlights,
     onLineClick,
+    onHighlightClick,
   }: {
     idx: number;
     lineText: string;
     lineState: string;
     highlights?: HighlightItem[];
     onLineClick: (idx: number) => void;
+    onHighlightClick: (
+      item: HighlightItem,
+      lineIdx: number,
+      rect: DOMRect,
+    ) => void;
   }) => {
     const renderedContent = useMemo(() => {
       if (!lineText) return <span className="block h-[1em]">&nbsp;</span>;
       if (!highlights || highlights.length === 0) return lineText;
 
-      type Segment = { text: string; color?: string };
+      type Segment = { text: string; highlight?: HighlightItem };
       let segments: Segment[] = [{ text: lineText }];
 
       for (const hl of highlights) {
@@ -28,14 +34,14 @@ const MemoizedReaderLine = React.memo(
         const nextSegments: Segment[] = [];
 
         for (const seg of segments) {
-          if (seg.color || !seg.text.includes(hl.text)) {
+          if (seg.highlight || !seg.text.includes(hl.text)) {
             nextSegments.push(seg);
           } else {
             const parts = seg.text.split(hl.text);
             for (let i = 0; i < parts.length; i++) {
               if (parts[i].length > 0) nextSegments.push({ text: parts[i] });
               if (i < parts.length - 1)
-                nextSegments.push({ text: hl.text, color: hl.color });
+                nextSegments.push({ text: hl.text, highlight: hl });
             }
           }
         }
@@ -45,15 +51,33 @@ const MemoizedReaderLine = React.memo(
       return (
         <>
           {segments.map((s, sIdx) =>
-            s.color ? (
+            s.highlight ? (
               <mark
                 key={sIdx}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const target = e.currentTarget as HTMLElement;
+                  onHighlightClick(
+                    s.highlight!,
+                    idx,
+                    target.getBoundingClientRect(),
+                  );
+                }}
+                className="cursor-pointer transition-opacity hover:opacity-80"
                 style={{
-                  backgroundColor: s.color,
+                  backgroundColor: s.highlight.color,
                   color: "inherit",
                   padding: "0 2px",
                   borderRadius: "3px",
+                  borderBottom: s.highlight.note
+                    ? "2px dotted currentColor"
+                    : undefined,
                 }}
+                title={
+                  s.highlight.note
+                    ? `Note: ${s.highlight.note}`
+                    : "Click to edit or remove highlight"
+                }
               >
                 {s.text}
               </mark>
@@ -63,7 +87,7 @@ const MemoizedReaderLine = React.memo(
           )}
         </>
       );
-    }, [lineText, highlights]);
+    }, [lineText, highlights, idx, onHighlightClick]);
 
     return (
       <div
@@ -93,6 +117,11 @@ interface ReaderTextBodyProps {
   fontSize: number;
   fontFamily: string;
   onLineClick: (displayIdx: number) => void;
+  onHighlightClick: (
+    item: HighlightItem,
+    lineIdx: number,
+    rect: DOMRect,
+  ) => void;
 }
 
 export const ReaderTextBody: React.FC<ReaderTextBodyProps> = ({
@@ -104,6 +133,7 @@ export const ReaderTextBody: React.FC<ReaderTextBodyProps> = ({
   fontSize,
   fontFamily,
   onLineClick,
+  onHighlightClick,
 }) => {
   return (
     <div
@@ -128,6 +158,7 @@ export const ReaderTextBody: React.FC<ReaderTextBodyProps> = ({
             lineState={lineState}
             highlights={hlItems}
             onLineClick={onLineClick}
+            onHighlightClick={onHighlightClick}
           />
         );
       })}

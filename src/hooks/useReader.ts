@@ -1,7 +1,7 @@
 // src/hooks/useReader.ts
 import { useState, useRef, useEffect, useCallback } from "react";
 import { synthesize, cancelPendingSynthesis, clearTTSQueue } from "../utils/tts";
-import { updateBookProgress } from "../utils/db";
+import { updateBookProgress, recordReadingProgress } from "../utils/db";
 
 type LinePos = { pageIdx: number; lineIdx: number; text: string };
 type CacheKeyData = { voiceId: string; pageIdx: number; lineIdx: number };
@@ -44,6 +44,9 @@ export function useReader(
   const voiceIdRef = useRef(voiceId);
   const isPlayingRef = useRef(false);
 
+  // Time-tracker ref to accumulate listening duration accurately
+  const lastPlaybackTickRef = useRef<number | null>(null);
+
   const blobCacheRef = useRef<Map<string, Blob>>(new Map());
   const inflightRef = useRef<Map<string, Promise<Blob | null>>>(new Map());
   const objectUrlRef = useRef<string | null>(null);
@@ -52,6 +55,18 @@ export function useReader(
 
   pagesRef.current = pages;
   bookIdRef.current = bookId;
+
+  // Flush accumulated playback duration
+  const flushReadingDuration = useCallback((linesCount: number = 0) => {
+    if (lastPlaybackTickRef.current !== null) {
+      const now = Date.now();
+      const elapsedSec = Math.max(0, Math.round((now - lastPlaybackTickRef.current) / 1000));
+      if (elapsedSec > 0 || linesCount > 0) {
+        recordReadingProgress(elapsedSec, linesCount).catch(() => { });
+      }
+      lastPlaybackTickRef.current = now;
+    }
+  }, []);
 
   useEffect(() => {
     speedRef.current = speed;
@@ -99,6 +114,8 @@ export function useReader(
   );
 
   const stopSession = useCallback(() => {
+    flushReadingDuration();
+    lastPlaybackTickRef.current = null;
     sessionRef.current += 1;
     prefetchSessionRef.current = null;
     if (audioRef.current) {
@@ -107,7 +124,7 @@ export function useReader(
     }
     revokeObjectUrl();
     clearTTSQueue();
-  }, [revokeObjectUrl]);
+  }, [flushReadingDuration, revokeObjectUrl]);
 
   const requestWakeLock = useCallback(async () => {
     if ("wakeLock" in navigator && !wakeLockRef.current) {
@@ -201,11 +218,13 @@ export function useReader(
   );
 
   const finishPlayback = useCallback(async () => {
+    flushReadingDuration();
+    lastPlaybackTickRef.current = null;
     isPlayingRef.current = false;
     setIsPlaying(false);
     prefetchSessionRef.current = null;
     await releaseWakeLock();
-  }, [releaseWakeLock]);
+  }, [flushReadingDuration, releaseWakeLock]);
 
   const playLineAt = useCallback(
     async (pageIdx: number, lineIdx: number) => {
@@ -266,28 +285,28 @@ export function useReader(
           const nextLine = lineIdx + 1;
           currentLineRef.current = nextLine;
           setCurrentLine(nextLine);
+
+          // Flush reading time and count 1 sentence/line read
+          flushReadingDuration(1);
+
           const id = bookIdRef.current;
           if (id) updateBookProgress(id, pageIdx, nextLine);
 
-          // === SMART PAUSING LOGIC ===
-          // Check the terminal character of the line that just finished playing
+          // Smart Pausing Logic
           const text = pageLines[lineIdx].trim();
           const lastChar = text.slice(-1);
           const isTerminalPunctuation = /[.?!—:;]/.test(lastChar) || text.endsWith("...");
 
           if (isTerminalPunctuation) {
-            // Apply a micro-pause proportional to the user's reading speed
             const delayMs = 400 / speedRef.current;
             await new Promise((resolve) => setTimeout(resolve, delayMs));
           }
 
-          // Double check if user manually paused *during* the micro-pause timeout
           if (session !== sessionRef.current || !isPlayingRef.current) return;
-          // ===========================
-
           void playLineAt(pageIdx, nextLine);
         };
 
+        lastPlaybackTickRef.current = Date.now();
         await audio.play();
       } catch (error) {
         if (session !== sessionRef.current) return;
@@ -295,7 +314,7 @@ export function useReader(
         await finishPlayback();
       }
     },
-    [finishPlayback, getBlob, goToPage, revokeObjectUrl, startBackgroundProcessing]
+    [finishPlayback, flushReadingDuration, getBlob, goToPage, revokeObjectUrl, startBackgroundProcessing]
   );
 
   useEffect(() => {
@@ -348,6 +367,7 @@ export function useReader(
     }
     isPlayingRef.current = true;
     setIsPlaying(true);
+    lastPlaybackTickRef.current = Date.now();
     await requestWakeLock();
     void playLineAt(currentPageRef.current, currentLineRef.current);
   }, [playLineAt, releaseWakeLock, requestWakeLock, stopSession]);
@@ -378,6 +398,7 @@ export function useReader(
       if (wasPlaying) {
         isPlayingRef.current = true;
         setIsPlaying(true);
+        lastPlaybackTickRef.current = Date.now();
         void playLineAt(pageIdx, lineIdx);
       }
     },
@@ -386,6 +407,7 @@ export function useReader(
 
   useEffect(() => {
     return () => {
+      flushReadingDuration();
       sessionRef.current += 1;
       if (audioRef.current) {
         audioRef.current.onended = null;
@@ -397,7 +419,7 @@ export function useReader(
       inflightRef.current.clear();
       void releaseWakeLock();
     };
-  }, [releaseWakeLock, revokeObjectUrl]);
+  }, [flushReadingDuration, releaseWakeLock, revokeObjectUrl]);
 
   return {
     currentPage,
