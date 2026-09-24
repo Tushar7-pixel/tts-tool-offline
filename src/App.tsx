@@ -1,11 +1,5 @@
 // src/App.tsx
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useRef,
-  useCallback,
-} from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   extractPdfPages,
   mapDisplayToSentences,
@@ -15,7 +9,6 @@ import {
 import {
   isVoiceInstalled,
   downloadVoice,
-  DEFAULT_PIPER_VOICE,
   subscribeTtsStatus,
   type TtsEngineStatus,
 } from "./utils/tts";
@@ -51,11 +44,7 @@ import {
   requestScreenWakeLock,
   releaseScreenWakeLock,
 } from "./utils/backgroundAudio";
-import {
-  setupMediaSession,
-  updateMediaSessionState,
-} from "./utils/mediaSession";
-import { AVAILABLE_VOICES } from "./utils/voiceCatalog";
+import { updateMediaSessionState } from "./utils/mediaSession";
 
 function DictionaryModal({
   word,
@@ -122,7 +111,6 @@ export default function App() {
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
-  const [downloadPct, setDownloadPct] = useState<number | null>(null);
   const [gotoInput, setGotoInput] = useState<string>("");
   const [fontSize, setFontSize] = useState(15);
   const [navbarHidden, setNavbarHidden] = useState(false);
@@ -134,7 +122,6 @@ export default function App() {
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
   const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Sleep Timer States
   const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
@@ -152,7 +139,7 @@ export default function App() {
     showColorPicker,
     setShowColorPicker,
     clearSelection,
-    lastSelectionTimeRef,
+    toolbarRef,
   } = useTextSelection();
 
   // Voice Management States
@@ -169,20 +156,10 @@ export default function App() {
       localStorage.getItem("echoread_female_voice") ||
       "en_US-hfc_female-medium",
   );
-  const [activeGender, setActiveGender] = useState<"male" | "female">("male");
+  const [activeGender] = useState<"male" | "female">("male");
 
-  const isMaleReady = installedVoiceIds.includes(maleVoiceId);
-  const isFemaleReady = Boolean(
-    femaleVoiceId && installedVoiceIds.includes(femaleVoiceId),
-  );
-  const canToggleVoices = isMaleReady && isFemaleReady;
   const currentActiveVoiceId =
     activeGender === "male" ? maleVoiceId : femaleVoiceId || maleVoiceId;
-  const maleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === maleVoiceId);
-  const femaleVoiceInfo = AVAILABLE_VOICES.find((v) => v.id === femaleVoiceId);
-  const currentVoiceInfo = AVAILABLE_VOICES.find(
-    (v) => v.id === currentActiveVoiceId,
-  );
 
   const ttsPages = useMemo(() => {
     if (!activeBook?.pages) return [];
@@ -449,10 +426,6 @@ export default function App() {
     <div
       className="app-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col font-sans"
       data-theme={theme}
-      onClick={() => {
-        if (Date.now() - lastSelectionTimeRef.current < 250) return;
-        if (selectionParams) clearSelection();
-      }}
     >
       {/* Header */}
       <header
@@ -609,6 +582,7 @@ export default function App() {
       {/* Floating Highlight Toolbar */}
       {selectionParams && (
         <HighlightToolbar
+          toolbarRef={toolbarRef}
           selectionParams={selectionParams}
           compactChrome={compactChrome}
           showColorPicker={showColorPicker}
@@ -622,12 +596,12 @@ export default function App() {
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:min-h-0 lg:overflow-hidden">
         <main
           ref={readerContainerRef}
-          className={`app-panel flex flex-col shadow-xl overflow-hidden relative ${isFullscreen ? "fixed inset-0 z-50 w-screen h-[100dvh]" : "lg:col-span-8 lg:h-full rounded-lg"}`}
+          className="app-panel flex flex-col shadow-xl overflow-hidden relative lg:col-span-8 lg:h-full rounded-lg"
         >
           {/* Reader Panel Subheader */}
           <div className="app-panel-header px-4 py-2.5 flex items-center justify-between text-xs shrink-0 relative z-20">
             <div className="flex items-center gap-2 truncate">
-              {activeBook?.chapters?.length && (
+              {activeBook?.chapters && activeBook.chapters.length > 0 && (
                 <button
                   onClick={() => setIsChapterDrawerOpen(true)}
                   className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1"
@@ -792,11 +766,9 @@ export default function App() {
         maleVoiceId={maleVoiceId}
         femaleVoiceId={femaleVoiceId}
         onDownloadVoice={async (id) => {
-          setDownloadPct(0);
-          await downloadVoice(id, setDownloadPct);
+          await downloadVoice(id, () => {});
           setInstalledVoiceIds((prev) => [...new Set([...prev, id])]);
           setVoiceReady(true);
-          setDownloadPct(null);
         }}
         onSetMaleVoice={setMaleVoiceId}
         onSetFemaleVoice={setFemaleVoiceId}
