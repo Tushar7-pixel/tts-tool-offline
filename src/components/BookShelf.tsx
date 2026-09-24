@@ -1,5 +1,5 @@
 // src/components/BookShelf.tsx
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import type { BookDoc } from "../utils/db";
 import { exportLibrary, importLibrary } from "../utils/db";
 import { FindBookModal } from "./FindBookModal";
@@ -39,12 +39,26 @@ export const BookShelf: React.FC<BookShelfProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [shelfPage, setShelfPage] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const isOnline = useOnlineStatus();
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
+  const isOnline = useOnlineStatus();
   const [isFindModalOpen, setIsFindModalOpen] = useState(false);
   const [isExploreModalOpen, setIsExploreModalOpen] = useState(false);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const filteredBooks = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -72,6 +86,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   };
 
   const handleExportLibrary = async () => {
+    setMenuOpen(false);
     try {
       const jsonStr = await exportLibrary();
       const blob = new Blob([jsonStr], { type: "application/json" });
@@ -90,6 +105,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   const handleImportLibrary = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
+    setMenuOpen(false);
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -126,7 +142,8 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   return (
     <>
       <div className="app-panel rounded-lg overflow-hidden flex flex-col">
-        <div className="app-panel-header px-4 py-3 flex items-center justify-between">
+        {/* Clean Header with Hidden Backup Menu */}
+        <div className="app-panel-header px-4 py-3 flex items-center justify-between relative">
           <div className="flex items-center gap-2">
             <h2 className="text-xs uppercase tracking-wider font-bold">
               Book Shelf
@@ -136,7 +153,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </span>
           </div>
 
-          <div>
+          <div className="flex items-center gap-1.5">
             <input
               type="file"
               ref={fileInputRef}
@@ -150,6 +167,45 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             >
               <span>+</span> Add Book
             </button>
+
+            {/* Options Gear Menu for Backup / Restore */}
+            <div className="relative" ref={menuRef}>
+              <button
+                type="button"
+                onClick={() => setMenuOpen((prev) => !prev)}
+                title="Library Options"
+                className="app-btn text-xs px-2 py-1 rounded transition cursor-pointer flex items-center justify-center"
+              >
+                ⚙️
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-44 app-panel border border-[var(--panel-border)] shadow-2xl rounded-xl p-1 z-50 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-150">
+                  <button
+                    type="button"
+                    onClick={handleExportLibrary}
+                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>💾</span> Backup Library
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={importInputRef}
+                    accept=".json,application/json"
+                    className="hidden"
+                    onChange={handleImportLibrary}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => importInputRef.current?.click()}
+                    className="w-full text-left px-3 py-2 text-xs font-medium rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition flex items-center gap-2 cursor-pointer"
+                  >
+                    <span>📂</span> Restore Data
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -209,9 +265,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                       <tr
                         key={b.id}
                         onClick={() => onSelectBook(b)}
-                        className={`shelf-row group cursor-pointer transition ${
-                          isSelected ? "is-selected" : ""
-                        }`}
+                        className={`shelf-row group cursor-pointer transition ${isSelected ? "is-selected" : ""}`}
                       >
                         <td className="py-2.5 pr-2 truncate">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -313,6 +367,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </div>
           )}
 
+          {/* Online Navigation Action Cluster (Backup/Restore removed from here) */}
           <div className="mt-3 flex flex-col gap-1.5 w-full">
             <div className="flex gap-2 w-full">
               <button
@@ -343,32 +398,6 @@ export const BookShelf: React.FC<BookShelfProps> = ({
               >
                 <span>🧭</span>
                 <span>Explore Books</span>
-              </button>
-            </div>
-
-            {/* DATA MANAGEMENT ACTIONS */}
-            <div className="flex gap-2 w-full mt-1 border-t border-[var(--panel-border)] pt-2.5">
-              <button
-                type="button"
-                onClick={handleExportLibrary}
-                className="app-btn text-[11px] font-medium py-1.5 px-2 rounded flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>💾</span> Backup Library
-              </button>
-
-              <input
-                type="file"
-                ref={importInputRef}
-                accept=".json,application/json"
-                className="hidden"
-                onChange={handleImportLibrary}
-              />
-              <button
-                type="button"
-                onClick={() => importInputRef.current?.click()}
-                className="app-btn text-[11px] font-medium py-1.5 px-2 rounded flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>📂</span> Restore Data
               </button>
             </div>
 

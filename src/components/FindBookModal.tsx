@@ -1,6 +1,7 @@
 // src/components/FindBookModal.tsx
-import React, { useState } from 'react';
-import type { ReaderTheme } from '../utils/readerAppearance';
+import React, { useState } from "react";
+import type { ReaderTheme } from "../utils/readerAppearance";
+import { launchExternalUrl } from "../utils/browser";
 
 interface BookResult {
   key: string;
@@ -21,7 +22,7 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({
   onClose,
   theme,
 }) => {
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
   const [results, setResults] = useState<BookResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,27 +40,26 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({
     try {
       const res = await fetch(
         `https://openlibrary.org/search.json?q=${encodeURIComponent(
-          cleanQuery
-        )}&limit=15&fields=key,title,author_name,first_publish_year,cover_i`
+          cleanQuery,
+        )}&limit=15&fields=key,title,author_name,first_publish_year,cover_i`,
       );
-      if (!res.ok) throw new Error('Search failed');
+      if (!res.ok) throw new Error("Search failed");
       const data = await res.json();
       setResults(data.docs || []);
     } catch {
-      setError('Unable to fetch books. Please check your network connection.');
+      setError("Unable to fetch books. Please check your network connection.");
     } finally {
       setLoading(false);
     }
   };
 
-  const openOcean = (book: BookResult) => {
+  const openOcean = (book: BookResult, useAdFreeSearch = true) => {
     const author = book.author_name?.[0];
     const target = author ? `${book.title} ${author}` : book.title;
-    window.open(
-      `https://oceanofpdf.com/?s=${encodeURIComponent(target)}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    const oceanUrl = `https://oceanofpdf.com/?s=${encodeURIComponent(target)}`;
+
+    // Set second arg to false if you prefer direct Ocean of PDF over DuckDuckGo
+    launchExternalUrl(oceanUrl, useAdFreeSearch);
   };
 
   return (
@@ -103,7 +103,7 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({
             disabled={loading}
             className="app-btn text-xs font-semibold px-4 py-2 rounded-md transition cursor-pointer shrink-0 disabled:opacity-40"
           >
-            {loading ? 'Searching...' : 'Search'}
+            {loading ? "Searching..." : "Search"}
           </button>
         </form>
 
@@ -155,7 +155,7 @@ export const FindBookModal: React.FC<FindBookModalProps> = ({
                     {book.title}
                   </h3>
                   <p className="text-[11px] app-muted mt-0.5 truncate">
-                    {author || 'Unknown Author'}
+                    {author || "Unknown Author"}
                     {book.first_publish_year && (
                       <span className="opacity-60 ml-1.5 font-mono">
                         ({book.first_publish_year})
