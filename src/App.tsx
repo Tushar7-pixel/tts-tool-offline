@@ -252,7 +252,8 @@ export default function App() {
       localStorage.getItem("echoread_female_voice") || "en_US-hfc_female-medium"
     );
   });
-
+  // Track selection creation time to prevent mouse-up click collision on desktop
+  const lastSelectionTimeRef = useRef<number>(0);
   const [activeGender, setActiveGender] = useState<"male" | "female">("male");
 
   const isMaleReady = installedVoiceIds.includes(maleVoiceId);
@@ -749,98 +750,122 @@ export default function App() {
     }
   };
 
+  // === INSTANT MULTI-LINE SELECTION DETECTION ===
   const handleTextSelection = useCallback(() => {
-    setTimeout(() => {
-      const sel = window.getSelection();
-      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-        setSelectionParams(null);
-        setShowColorPicker(false);
-        return;
-      }
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+      setSelectionParams(null);
+      setShowColorPicker(false);
+      return;
+    }
 
-      const fullSelectedText = sel.toString().trim();
-      if (!fullSelectedText) {
-        setSelectionParams(null);
-        setShowColorPicker(false);
-        return;
-      }
+    const fullSelectedText = sel.toString().trim();
+    if (!fullSelectedText) {
+      setSelectionParams(null);
+      setShowColorPicker(false);
+      return;
+    }
 
-      const range = sel.getRangeAt(0);
-      const startLineEl = (
-        range.startContainer.nodeType === Node.ELEMENT_NODE
-          ? (range.startContainer as Element)
-          : range.startContainer.parentElement
-      )?.closest(".reader-line");
-      const endLineEl = (
-        range.endContainer.nodeType === Node.ELEMENT_NODE
-          ? (range.endContainer as Element)
-          : range.endContainer.parentElement
-      )?.closest(".reader-line");
+    const range = sel.getRangeAt(0);
+    const startLineEl = (
+      range.startContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.startContainer as Element)
+        : range.startContainer.parentElement
+    )?.closest(".reader-line");
+    const endLineEl = (
+      range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.endContainer as Element)
+        : range.endContainer.parentElement
+    )?.closest(".reader-line");
 
-      if (!startLineEl || !endLineEl) {
-        setSelectionParams(null);
-        setShowColorPicker(false);
-        return;
-      }
+    if (!startLineEl || !endLineEl) {
+      setSelectionParams(null);
+      setShowColorPicker(false);
+      return;
+    }
 
-      const startIdx = parseInt(startLineEl.id.replace("reader-line-", ""), 10);
-      const endIdx = parseInt(endLineEl.id.replace("reader-line-", ""), 10);
-      const minIdx = Math.min(startIdx, endIdx);
-      const maxIdx = Math.max(startIdx, endIdx);
+    const startIdx = parseInt(startLineEl.id.replace("reader-line-", ""), 10);
+    const endIdx = parseInt(endLineEl.id.replace("reader-line-", ""), 10);
+    const minIdx = Math.min(startIdx, endIdx);
+    const maxIdx = Math.max(startIdx, endIdx);
 
-      const lineEntries: { lineIdx: number; text: string }[] = [];
+    const lineEntries: { lineIdx: number; text: string }[] = [];
 
-      for (let i = minIdx; i <= maxIdx; i++) {
-        const lineEl = document.getElementById(`reader-line-${i}`);
-        if (!lineEl) continue;
+    for (let i = minIdx; i <= maxIdx; i++) {
+      const lineEl = document.getElementById(`reader-line-${i}`);
+      if (!lineEl) continue;
 
-        const lineText = lineEl.textContent || "";
-        if (!lineText) continue;
+      const lineText = lineEl.textContent || "";
+      if (!lineText) continue;
 
-        const lineRange = document.createRange();
-        lineRange.selectNodeContents(lineEl);
+      const lineRange = document.createRange();
+      lineRange.selectNodeContents(lineEl);
 
-        const testRange = range.cloneRange();
+      const testRange = range.cloneRange();
+      if (
+        testRange.compareBoundaryPoints(Range.START_TO_END, lineRange) > 0 &&
+        testRange.compareBoundaryPoints(Range.END_TO_START, lineRange) < 0
+      ) {
+        const subRange = document.createRange();
         if (
-          testRange.compareBoundaryPoints(Range.START_TO_END, lineRange) > 0 &&
-          testRange.compareBoundaryPoints(Range.END_TO_START, lineRange) < 0
+          testRange.compareBoundaryPoints(Range.START_TO_START, lineRange) <= 0
         ) {
-          const subRange = document.createRange();
-          if (
-            testRange.compareBoundaryPoints(Range.START_TO_START, lineRange) <=
-            0
-          ) {
-            subRange.setStart(lineRange.startContainer, lineRange.startOffset);
-          } else {
-            subRange.setStart(testRange.startContainer, testRange.startOffset);
-          }
+          subRange.setStart(lineRange.startContainer, lineRange.startOffset);
+        } else {
+          subRange.setStart(testRange.startContainer, testRange.startOffset);
+        }
 
-          if (
-            testRange.compareBoundaryPoints(Range.END_TO_END, lineRange) >= 0
-          ) {
-            subRange.setEnd(lineRange.endContainer, lineRange.endOffset);
-          } else {
-            subRange.setEnd(testRange.endContainer, testRange.endOffset);
-          }
+        if (testRange.compareBoundaryPoints(Range.END_TO_END, lineRange) >= 0) {
+          subRange.setEnd(lineRange.endContainer, lineRange.endOffset);
+        } else {
+          subRange.setEnd(testRange.endContainer, testRange.endOffset);
+        }
 
-          const partialText = subRange.toString().trim();
-          if (partialText) {
-            lineEntries.push({ lineIdx: i, text: partialText });
-          }
+        const partialText = subRange.toString().trim();
+        if (partialText) {
+          lineEntries.push({ lineIdx: i, text: partialText });
         }
       }
+    }
 
-      if (lineEntries.length === 0) {
-        setSelectionParams(null);
-        setShowColorPicker(false);
-        return;
-      }
-
-      const rect = range.getBoundingClientRect();
-      setSelectionParams({ rect, text: fullSelectedText, lineEntries });
+    if (lineEntries.length === 0) {
+      setSelectionParams(null);
       setShowColorPicker(false);
-    }, 50);
+      return;
+    }
+
+    // Accurate coordinates across desktop and mobile
+    const clientRects = range.getClientRects();
+    const rect =
+      clientRects.length > 0
+        ? clientRects[clientRects.length - 1]
+        : range.getBoundingClientRect();
+
+    lastSelectionTimeRef.current = Date.now();
+    setSelectionParams({ rect, text: fullSelectedText, lineEntries });
   }, []);
+
+  // Listen directly to document selection changes for immediate response
+  useEffect(() => {
+    let timeoutId: number;
+    const onSelectionChange = () => {
+      clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(handleTextSelection, 60);
+    };
+
+    const onMouseUp = () => {
+      setTimeout(handleTextSelection, 10);
+    };
+
+    document.addEventListener("selectionchange", onSelectionChange);
+    document.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [handleTextSelection]);
 
   const handleApplyColor = async (color: string) => {
     if (!activeBook || !selectionParams) return;
@@ -872,6 +897,10 @@ export default function App() {
       className="app-shell min-h-screen lg:h-screen lg:overflow-hidden flex flex-col font-sans"
       data-theme={theme}
       onClick={() => {
+        // Prevent instant dismissal if selection was created within the last 250ms (mouse-up click)
+        if (Date.now() - lastSelectionTimeRef.current < 250) {
+          return;
+        }
         if (selectionParams) {
           window.getSelection()?.removeAllRanges();
           setSelectionParams(null);
@@ -1076,7 +1105,7 @@ export default function App() {
         </div>
       </header>
 
-      {compactChrome && activeBook && (
+      {compactChrome && activeBook && !selectionParams && (
         <div
           className={`fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-40 transition-all duration-300 ${
             navbarHidden
@@ -1176,7 +1205,7 @@ export default function App() {
         </div>
       )}
 
-      {navbarHidden && compactChrome && (
+      {navbarHidden && compactChrome && !selectionParams && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
           <button
             onClick={() => setNavbarHidden(false)}
@@ -1193,19 +1222,31 @@ export default function App() {
       {/* Floating Selection Toolbar & 6-Color Picker */}
       {selectionParams && (
         <div
-          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-lg p-1 animate-in fade-in zoom-in duration-200"
-          style={{
-            top: Math.max(10, selectionParams.rect.top - 50),
-            left: Math.max(
-              10,
-              Math.min(
-                window.innerWidth - 250,
-                selectionParams.rect.left +
-                  selectionParams.rect.width / 2 -
-                  100,
-              ),
-            ),
-          }}
+          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-2xl p-2 animate-in fade-in zoom-in-95 duration-150"
+          style={
+            compactChrome
+              ? {
+                  bottom: "24px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  maxWidth: "90vw",
+                }
+              : {
+                  top: Math.min(
+                    window.innerHeight - 60,
+                    selectionParams.rect.bottom + 8,
+                  ),
+                  left: Math.max(
+                    10,
+                    Math.min(
+                      window.innerWidth - 250,
+                      selectionParams.rect.left +
+                        selectionParams.rect.width / 2 -
+                        100,
+                    ),
+                  ),
+                }
+          }
           onClick={(e) => e.stopPropagation()}
         >
           {!showColorPicker ? (
@@ -1217,27 +1258,27 @@ export default function App() {
                     window.getSelection()?.removeAllRanges();
                     setSelectionParams(null);
                   }}
-                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-xl transition cursor-pointer"
                 >
                   📖 Define
                 </button>
               )}
               <button
                 onClick={() => setShowColorPicker(true)}
-                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-xl transition flex items-center gap-1.5 cursor-pointer"
               >
-                <span className="w-3 h-3 rounded-full bg-yellow-300"></span>{" "}
+                <span className="w-3.5 h-3.5 rounded-full bg-yellow-300"></span>{" "}
                 Highlight
               </button>
             </>
           ) : (
-            <div className="flex items-center gap-1.5 px-1 py-0.5">
+            <div className="flex items-center gap-2 px-1 py-0.5">
               {HIGHLIGHT_COLORS.map((col) => (
                 <button
                   key={col.label}
                   onClick={() => handleApplyColor(col.value)}
                   title={col.label}
-                  className={`w-6 h-6 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-xs`}
+                  className={`w-7 h-7 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-sm`}
                 />
               ))}
               <button
@@ -1397,8 +1438,8 @@ export default function App() {
                 setNavbarHidden((prev) => !prev);
               }
             }}
-            onMouseUp={handleTextSelection}
-            onTouchEnd={handleTextSelection}
+            // onMouseUp={handleTextSelection}
+            // onTouchEnd={handleTextSelection}
             className={`px-3 py-4 sm:px-6 md:p-10 flex-1 min-h-0 overflow-y-auto relative ${isFullscreen ? "h-full max-h-none" : ""}`}
           >
             {activeBook ? (
