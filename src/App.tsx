@@ -1199,19 +1199,33 @@ export default function App() {
       {/* Floating Selection Toolbar & 6-Color Picker */}
       {selectionParams && (
         <div
-          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-lg p-1 animate-in fade-in zoom-in duration-200"
-          style={{
-            top: Math.max(10, selectionParams.rect.top - 50),
-            left: Math.max(
-              10,
-              Math.min(
-                window.innerWidth - 250,
-                selectionParams.rect.left +
-                  selectionParams.rect.width / 2 -
-                  100,
-              ),
-            ),
-          }}
+          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-xl p-1.5 animate-in fade-in zoom-in duration-200"
+          style={
+            // Mobile (compact chrome): Anchor cleanly above the bottom toolbar to avoid native OS callout
+            compactChrome
+              ? {
+                  bottom: "90px",
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  maxWidth: "92vw",
+                }
+              : {
+                  // Desktop: Position right below the selection rect instead of above it
+                  top: Math.min(
+                    window.innerHeight - 60,
+                    selectionParams.rect.bottom + 8,
+                  ),
+                  left: Math.max(
+                    12,
+                    Math.min(
+                      window.innerWidth - 260,
+                      selectionParams.rect.left +
+                        selectionParams.rect.width / 2 -
+                        100,
+                    ),
+                  ),
+                }
+          }
           onClick={(e) => e.stopPropagation()}
         >
           {!showColorPicker ? (
@@ -1223,27 +1237,27 @@ export default function App() {
                     window.getSelection()?.removeAllRanges();
                     setSelectionParams(null);
                   }}
-                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition cursor-pointer"
+                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition cursor-pointer"
                 >
                   📖 Define
                 </button>
               )}
               <button
                 onClick={() => setShowColorPicker(true)}
-                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition flex items-center gap-1.5 cursor-pointer"
+                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition flex items-center gap-1.5 cursor-pointer"
               >
                 <span className="w-3 h-3 rounded-full bg-yellow-300"></span>{" "}
                 Highlight
               </button>
             </>
           ) : (
-            <div className="flex items-center gap-1.5 px-1 py-0.5">
+            <div className="flex items-center gap-2 px-1 py-0.5">
               {HIGHLIGHT_COLORS.map((col) => (
                 <button
                   key={col.label}
                   onClick={() => handleApplyColor(col.value)}
                   title={col.label}
-                  className={`w-6 h-6 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-xs`}
+                  className={`w-7 h-7 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-sm`}
                 />
               ))}
               <button
