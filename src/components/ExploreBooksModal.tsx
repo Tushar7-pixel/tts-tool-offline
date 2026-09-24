@@ -1,7 +1,7 @@
 // src/components/ExploreBooksModal.tsx
 import React, { useState, useEffect } from "react";
 import type { ReaderTheme } from "../utils/readerAppearance";
-import { launchExternalUrl } from "../utils/browser";
+import { openBookInPlatform } from "../utils/browser";
 
 interface BookWork {
   key: string;
@@ -24,7 +24,6 @@ interface BookDetail {
   coverId?: number;
   year?: number;
   description?: string;
-  openLibraryUrl: string;
 }
 
 const GENRES = [
@@ -65,21 +64,17 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeDetail, setActiveDetail] = useState<BookDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  // const [openingKey, setOpeningKey] = useState<string | null>(null);
 
   const handleOpenDetail = async (book: BookWork) => {
-    // 1. Immediately create the base detail object with cover, title & author
     const detail: BookDetail = {
       key: book.key,
       title: book.title,
       authors: book.author_name,
       coverId: book.cover_id,
       year: book.first_publish_year,
-      openLibraryUrl: `https://openlibrary.org${book.key}`,
       description: undefined,
     };
 
-    // 2. Open the detail view right away and start loading
     setActiveDetail(detail);
     setDetailLoading(true);
 
@@ -98,7 +93,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
           fetchedDesc = data.description.value;
         }
 
-        // 3. Update the description once it arrives
         if (fetchedDesc) {
           setActiveDetail((prev) =>
             prev ? { ...prev, description: fetchedDesc } : null,
@@ -174,18 +168,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
       setActiveDetail(null);
       setActiveAuthor(clean);
     }
-  };
-
-  const openOcean = (
-    title: string,
-    author?: string,
-    useAdFreeSearch = true,
-  ) => {
-    const query = author ? `${title} ${author}` : title;
-    const oceanUrl = `https://oceanofpdf.com/?s=${encodeURIComponent(query)}`;
-
-    // Set second arg to false if you prefer direct Ocean of PDF over DuckDuckGo
-    launchExternalUrl(oceanUrl, useAdFreeSearch);
   };
 
   const handleResetAuthor = () => {
@@ -286,7 +268,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
                 Search
               </button>
 
-              {/* Reset Button */}
               <button
                 type="button"
                 onClick={handleResetAuthor}
@@ -343,7 +324,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
 
         {/* Content Body */}
         <div className="p-3 sm:p-5 overflow-y-auto flex-1">
-          {/* Catalog Loading State */}
           {loading && (
             <div className="py-20 text-center app-muted text-xs space-y-2">
               <span className="text-xl inline-block animate-spin">⏳</span>
@@ -357,7 +337,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
             </div>
           )}
 
-          {/* Catalog Error State */}
           {error && !loading && (
             <div className="py-16 text-center space-y-2">
               <p className="text-xs text-red-400 font-semibold">{error}</p>
@@ -377,7 +356,6 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
             </div>
           )}
 
-          {/* Content Views (When not loading and no error) */}
           {!loading &&
             !error &&
             (activeDetail ? (
@@ -423,7 +401,8 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
                       <button
                         type="button"
                         onClick={() =>
-                          openOcean(
+                          openBookInPlatform(
+                            "ocean",
                             activeDetail.title,
                             activeDetail.authors?.[0],
                           )
@@ -434,27 +413,36 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
                         <span className="text-[10px]">↗</span>
                       </button>
 
-                      <a
-                        href={`https://archive.org/search?query=${encodeURIComponent(
-                          `${activeDetail.title}${activeDetail.authors?.[0] || ""}`,
-                        )}&and[]=mediatype%3A"texts"`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="app-btn text-xs font-medium py-1.5 px-3 rounded flex items-center gap-1 border border-inherit transition"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openBookInPlatform(
+                            "archive",
+                            activeDetail.title,
+                            activeDetail.authors?.[0],
+                          )
+                        }
+                        className="app-btn text-xs font-medium py-1.5 px-3 rounded flex items-center gap-1 border border-inherit transition cursor-pointer"
                       >
                         <span>Internet Archive</span>
                         <span className="text-[10px] opacity-75">↗</span>
-                      </a>
+                      </button>
 
-                      <a
-                        href={activeDetail.openLibraryUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="app-btn text-xs font-medium py-1.5 px-3 rounded flex items-center gap-1 border border-inherit transition"
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openBookInPlatform(
+                            "openlibrary",
+                            activeDetail.title,
+                            activeDetail.authors?.[0],
+                            activeDetail.key,
+                          )
+                        }
+                        className="app-btn text-xs font-medium py-1.5 px-3 rounded flex items-center gap-1 border border-inherit transition cursor-pointer"
                       >
                         <span>Open Library</span>
                         <span className="text-[10px] opacity-75">↗</span>
-                      </a>
+                      </button>
                     </div>
 
                     <div className="pt-2">
@@ -485,8 +473,7 @@ export const ExploreBooksModal: React.FC<ExploreBooksModalProps> = ({
                   </div>
                 </div>
               </div>
-            ) : /* Standard Results Grid */
-            books.length === 0 ? (
+            ) : books.length === 0 ? (
               <div className="py-16 text-center app-muted text-xs space-y-1">
                 <p>No titles found for this selection.</p>
                 <p className="text-[11px] opacity-75">

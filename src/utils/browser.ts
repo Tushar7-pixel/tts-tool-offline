@@ -1,19 +1,37 @@
 // src/utils/browser.ts
 
-export function launchExternalUrl(url: string, useDuckDuckGoFallback = false) {
-    let targetUrl = url;
+export type BookPlatform = "ocean" | "archive" | "openlibrary";
 
-    if (useDuckDuckGoFallback) {
-        // Strips direct site tracking and avoids landing-page redirect traps
-        const searchMatch = url.match(/[?&]s=([^&]+)/);
-        const query = searchMatch ? decodeURIComponent(searchMatch[1]) : "";
-        targetUrl = `https://duckduckgo.com/?q=${encodeURIComponent(`site:oceanofpdf.com ${query}`)}`;
+export function buildBookPlatformUrl(
+    platform: BookPlatform,
+    title: string,
+    author?: string,
+    openLibraryKey?: string
+): string {
+    const query = (author ? `${title} ${author}` : title).trim();
+    const encodedQuery = encodeURIComponent(query);
+
+    switch (platform) {
+        case "ocean":
+            return `https://oceanofpdf.com/?s=${encodedQuery}`;
+
+        case "archive":
+            return `https://archive.org/search?query=${encodedQuery}&and[]=mediatype%3A"texts"`;
+
+        case "openlibrary":
+            if (openLibraryKey) {
+                return `https://openlibrary.org${openLibraryKey}`;
+            }
+            return `https://openlibrary.org/search?q=${encodedQuery}&mode=everything`;
     }
+}
 
+export function openExternalUrl(targetUrl: string): void {
     const isAndroid = /android/i.test(navigator.userAgent);
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
 
-    // If installed as a PWA on Android, invoke Android Intent to kick it out to system browser
+    // On Android standalone PWAs, invoke the Android intent scheme
+    // so the default external browser (Brave / Chrome) takes over
     if (isAndroid && isStandalone) {
         try {
             const parsed = new URL(targetUrl);
@@ -23,10 +41,20 @@ export function launchExternalUrl(url: string, useDuckDuckGoFallback = false) {
             window.location.href = intentUri;
             return;
         } catch {
-            // Fallback to standard window.open on parsing failure
+            // Fallback below
         }
     }
 
-    // Desktop / standard browser tab
+    // Desktop or standard browser tabs
     window.open(targetUrl, "_blank", "noopener,noreferrer");
+}
+
+export function openBookInPlatform(
+    platform: BookPlatform,
+    title: string,
+    author?: string,
+    openLibraryKey?: string
+): void {
+    const url = buildBookPlatformUrl(platform, title, author, openLibraryKey);
+    openExternalUrl(url);
 }
