@@ -1,9 +1,10 @@
 // src/components/BookShelf.tsx
 import React, { useState, useMemo, useRef } from "react";
 import type { BookDoc } from "../utils/db";
+import { exportLibrary, importLibrary } from "../utils/db";
 import { FindBookModal } from "./FindBookModal";
 import { ExploreBooksModal } from "./ExploreBooksModal";
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
 
 interface BookShelfProps {
   books: BookDoc[];
@@ -15,12 +16,15 @@ interface BookShelfProps {
   pageSize?: number;
   theme: "dark" | "ereader";
 }
+
 export function cleanBookTitle(rawTitle: string): string {
-  return rawTitle
-    .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, "")
-    .replace(/\s+\d{6}(\s+\d{6})?.*$/i, "")
-    .replace(/[_-]+/g, " ")
-    .trim() || rawTitle;
+  return (
+    rawTitle
+      .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, "")
+      .replace(/\s+\d{6}(\s+\d{6})?.*$/i, "")
+      .replace(/[_-]+/g, " ")
+      .trim() || rawTitle
+  );
 }
 
 export const BookShelf: React.FC<BookShelfProps> = ({
@@ -36,16 +40,18 @@ export const BookShelf: React.FC<BookShelfProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [shelfPage, setShelfPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const isOnline = useOnlineStatus();
-  // const isOnline = useOnlineStatus();
+
   const [isFindModalOpen, setIsFindModalOpen] = useState(false);
   const [isExploreModalOpen, setIsExploreModalOpen] = useState(false);
 
   const filteredBooks = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
-    return books.filter((b) =>
-      cleanBookTitle(b.title).toLowerCase().includes(q) ||
-      b.title.toLowerCase().includes(q)
+    return books.filter(
+      (b) =>
+        cleanBookTitle(b.title).toLowerCase().includes(q) ||
+        b.title.toLowerCase().includes(q),
     );
   }, [books, searchQuery]);
 
@@ -64,22 +70,51 @@ export const BookShelf: React.FC<BookShelfProps> = ({
       e.target.value = "";
     }
   };
-  // function cleanBookTitle(rawTitle: string): string {
-  //   return rawTitle
-  //     // Strip leading variations: com, _com_, OceanofPDF, _OceanofPDF.com_, etc.
-  //     .replace(/^([_.\s-]*oceanofpdf(\.com)?|[_.\s-]*com)[_.\s-]+/i, '')
-  //     // Strip trailing export timestamps like "260305 203703" or "2..."
-  //     .replace(/\s+\d{6}(\s+\d{6})?.*$/i, '')
-  //     // Replace underscores and hyphens with clean spaces
-  //     .replace(/[_-]+/g, ' ')
-  //     .trim() || rawTitle;
-  // }
 
-  function resolveChapterTitle(book: BookDoc, activePage: number): string | null {
+  const handleExportLibrary = async () => {
+    try {
+      const jsonStr = await exportLibrary();
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `EchoRead_Backup_${new Date().toISOString().split("T")[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export library:", err);
+      alert("Failed to export library.");
+    }
+  };
+
+  const handleImportLibrary = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const count = await importLibrary(text);
+      alert(`Successfully imported ${count} books! Please refresh the page.`);
+      window.location.reload();
+    } catch (err) {
+      console.error("Import failed:", err);
+      alert(
+        "Failed to import backup file. Ensure it is a valid EchoRead JSON export.",
+      );
+    } finally {
+      e.target.value = "";
+    }
+  };
+
+  function resolveChapterTitle(
+    book: BookDoc,
+    activePage: number,
+  ): string | null {
     if (book.currentChapter) return book.currentChapter;
     if (!book.chapters || book.chapters.length === 0) return null;
 
-    // Find the last chapter whose start page is <= activePage
     const matching = [...book.chapters]
       .sort((a, b) => a.pageIndex - b.pageIndex)
       .filter((ch) => ch.pageIndex <= activePage + 1)
@@ -87,6 +122,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
 
     return matching?.title ?? null;
   }
+
   return (
     <>
       <div className="app-panel rounded-lg overflow-hidden flex flex-col">
@@ -151,16 +187,20 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                 <thead>
                   <tr className="app-muted border-b border-[var(--panel-border)]">
                     <th className="pb-2 font-medium w-[58%]">Book</th>
-                    <th className="pb-2 text-right font-medium w-[34%]">Progress</th>
+                    <th className="pb-2 text-right font-medium w-[34%]">
+                      Progress
+                    </th>
                     <th className="pb-2 text-right font-medium w-[8%]"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--panel-border)]">
                   {paginatedBooks.map((b) => {
                     const isSelected = b.id === activeBookId;
-                    const activePageNum = isSelected ? currentPage : b.currentPage;
+                    const activePageNum = isSelected
+                      ? currentPage
+                      : b.currentPage;
                     const progressPct = Math.round(
-                      ((activePageNum + 1) / b.totalPages) * 100
+                      ((activePageNum + 1) / b.totalPages) * 100,
                     );
                     const formattedTitle = cleanBookTitle(b.title);
                     const chapterName = resolveChapterTitle(b, activePageNum);
@@ -169,13 +209,12 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                       <tr
                         key={b.id}
                         onClick={() => onSelectBook(b)}
-                        className={`shelf-row group cursor-pointer transition ${isSelected ? "is-selected" : ""
-                          }`}
+                        className={`shelf-row group cursor-pointer transition ${
+                          isSelected ? "is-selected" : ""
+                        }`}
                       >
-                        {/* Cover + Title + Progress Bar */}
                         <td className="py-2.5 pr-2 truncate">
                           <div className="flex items-center gap-2.5 min-w-0">
-
                             <div className="w-9 h-12 rounded bg-black/10 border border-inherit flex items-center justify-center shrink-0 overflow-hidden">
                               {b.coverUrl ? (
                                 <img
@@ -184,7 +223,9 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <span className="text-xs select-none opacity-40">📖</span>
+                                <span className="text-xs select-none opacity-40">
+                                  📖
+                                </span>
                               )}
                             </div>
 
@@ -205,9 +246,7 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                           </div>
                         </td>
 
-                        {/* Progress + Chapter Details */}
                         <td className="py-2.5 text-right align-middle whitespace-nowrap">
-                          {/* Chapter Title (truncated to prevent breaking shelf width) */}
                           {chapterName && (
                             <div
                               className="text-[11px] font-medium text-[var(--accent)] truncate max-w-[110px] ml-auto"
@@ -216,8 +255,6 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                               {chapterName}
                             </div>
                           )}
-
-                          {/* Page Fraction */}
                           <div className="tabular-nums">
                             {activePageNum + 1}
                             <span className="app-muted font-normal text-[10px]">
@@ -225,12 +262,11 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                               / {b.totalPages}
                             </span>
                           </div>
-
-                          {/* Percentage */}
-                          <span className="text-[10px] app-muted tabular-nums">{progressPct}%</span>
+                          <span className="text-[10px] app-muted tabular-nums">
+                            {progressPct}%
+                          </span>
                         </td>
 
-                        {/* Delete Button */}
                         <td className="py-2.5 text-right align-middle">
                           <button
                             title="Delete PDF"
@@ -266,7 +302,9 @@ export const BookShelf: React.FC<BookShelfProps> = ({
               <button
                 disabled={currentShelfPage >= totalShelfPages - 1}
                 onClick={() =>
-                  setShelfPage((prev) => Math.min(totalShelfPages - 1, prev + 1))
+                  setShelfPage((prev) =>
+                    Math.min(totalShelfPages - 1, prev + 1),
+                  )
                 }
                 className="app-btn px-2 py-1 disabled:opacity-25 cursor-pointer"
               >
@@ -275,14 +313,17 @@ export const BookShelf: React.FC<BookShelfProps> = ({
             </div>
           )}
 
-          {/* Online Navigation Action Cluster */}
           <div className="mt-3 flex flex-col gap-1.5 w-full">
             <div className="flex gap-2 w-full">
               <button
                 type="button"
                 disabled={!isOnline}
                 onClick={() => setIsFindModalOpen(true)}
-                title={isOnline ? 'Search books across repositories' : 'Internet connection required'}
+                title={
+                  isOnline
+                    ? "Search books across repositories"
+                    : "Internet connection required"
+                }
                 className="app-btn text-xs font-medium py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>🔍</span>
@@ -293,7 +334,11 @@ export const BookShelf: React.FC<BookShelfProps> = ({
                 type="button"
                 disabled={!isOnline}
                 onClick={() => setIsExploreModalOpen(true)}
-                title={isOnline ? 'Browse genres and author catalogs' : 'Internet connection required'}
+                title={
+                  isOnline
+                    ? "Browse genres and author catalogs"
+                    : "Internet connection required"
+                }
                 className="app-btn app-accent text-xs font-bold py-2 px-3 rounded-lg flex-1 flex items-center justify-center gap-1.5 cursor-pointer transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>🧭</span>
@@ -301,8 +346,34 @@ export const BookShelf: React.FC<BookShelfProps> = ({
               </button>
             </div>
 
+            {/* DATA MANAGEMENT ACTIONS */}
+            <div className="flex gap-2 w-full mt-1 border-t border-[var(--panel-border)] pt-2.5">
+              <button
+                type="button"
+                onClick={handleExportLibrary}
+                className="app-btn text-[11px] font-medium py-1.5 px-2 rounded flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>💾</span> Backup Library
+              </button>
+
+              <input
+                type="file"
+                ref={importInputRef}
+                accept=".json,application/json"
+                className="hidden"
+                onChange={handleImportLibrary}
+              />
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                className="app-btn text-[11px] font-medium py-1.5 px-2 rounded flex-1 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>📂</span> Restore Data
+              </button>
+            </div>
+
             {!isOnline && (
-              <p className="text-[10px] app-muted text-center tracking-tight select-none">
+              <p className="text-[10px] app-muted text-center tracking-tight select-none mt-1">
                 ⚡ Offline mode: online catalog and discovery are disabled.
               </p>
             )}
@@ -310,7 +381,6 @@ export const BookShelf: React.FC<BookShelfProps> = ({
         </div>
       </div>
 
-      {/* Modals */}
       <FindBookModal
         isOpen={isFindModalOpen && isOnline}
         onClose={() => setIsFindModalOpen(false)}
@@ -321,7 +391,6 @@ export const BookShelf: React.FC<BookShelfProps> = ({
         onClose={() => setIsExploreModalOpen(false)}
         theme={theme}
       />
-
     </>
   );
 };

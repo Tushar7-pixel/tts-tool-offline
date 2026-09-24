@@ -12,7 +12,14 @@ import {
   downloadVoice,
   DEFAULT_PIPER_VOICE,
 } from "./utils/tts";
-import { saveBook, getAllBooks, type BookDoc, deleteBook } from "./utils/db";
+import {
+  saveBook,
+  getAllBooks,
+  type BookDoc,
+  deleteBook,
+  applyMultiLineHighlight,
+  type HighlightItem,
+} from "./utils/db";
 import { useReader } from "./hooks/useReader";
 import { BookShelf, cleanBookTitle } from "./components/BookShelf";
 import { AppearanceMenu } from "./components/AppearanceMenu";
@@ -41,39 +48,170 @@ import { subscribeTtsStatus, type TtsEngineStatus } from "./utils/tts";
 import { parseChaptersFromDisplayPages, type ChapterItem } from "./utils/pdf";
 import { ChapterDrawer } from "./components/ChapterDrawer";
 
+const HIGHLIGHT_COLORS = [
+  { label: "Yellow", value: "rgba(253, 224, 71, 0.4)", bg: "bg-yellow-300" },
+  { label: "Green", value: "rgba(134, 239, 172, 0.4)", bg: "bg-green-300" },
+  { label: "Blue", value: "rgba(147, 197, 253, 0.4)", bg: "bg-blue-300" },
+  { label: "Purple", value: "rgba(216, 180, 254, 0.4)", bg: "bg-purple-300" },
+  { label: "Pink", value: "rgba(249, 168, 212, 0.4)", bg: "bg-pink-300" },
+  { label: "Orange", value: "rgba(253, 186, 116, 0.4)", bg: "bg-orange-300" },
+];
+
+function DictionaryModal({
+  word,
+  data,
+  loading,
+  onClose,
+}: {
+  word: string | null;
+  data: any;
+  loading: boolean;
+  onClose: () => void;
+}) {
+  if (!word) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 dark:bg-black/60 backdrop-blur-sm p-4 transition-opacity"
+      onClick={onClose}
+    >
+      <div
+        className="app-panel w-full max-w-sm rounded-2xl p-5 shadow-2xl relative animate-in fade-in zoom-in duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 text-lg opacity-50 hover:opacity-100 cursor-pointer w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition"
+        >
+          ✕
+        </button>
+        <h3 className="text-xl font-bold mb-2 capitalize pr-6 text-[var(--app-text)]">
+          {word}
+        </h3>
+        {loading && (
+          <div className="py-6 flex justify-center">
+            <span className="inline-block w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin"></span>
+          </div>
+        )}
+        {!loading && !data && (
+          <p className="text-sm app-muted py-4">No definition found.</p>
+        )}
+        {!loading && data && (
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+            {data.meanings.map((m: any, i: number) => (
+              <div key={i} className="space-y-1.5">
+                <p className="text-[11px] font-bold text-[var(--accent)] uppercase tracking-wider bg-[var(--accent)]/10 inline-block px-2 py-0.5 rounded">
+                  {m.partOfSpeech}
+                </p>
+                <ul className="list-disc pl-5 text-sm space-y-2 text-[var(--app-text)] opacity-90">
+                  {m.definitions.slice(0, 3).map((d: any, j: number) => (
+                    <li key={j}>
+                      {d.definition}
+                      {d.example && (
+                        <p className="text-xs italic opacity-70 mt-0.5">
+                          "{d.example}"
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 const MemoizedReaderLine = React.memo(
   ({
     idx,
     lineText,
     lineState,
+    highlights,
     onLineClick,
   }: {
     idx: number;
     lineText: string;
     lineState: string;
+    highlights?: HighlightItem[];
     onLineClick: (idx: number) => void;
   }) => {
+    let renderedContent: React.ReactNode = lineText;
+
+    if (lineText.length > 0 && highlights && highlights.length > 0) {
+      type Segment = { text: string; color?: string };
+      let segments: Segment[] = [{ text: lineText }];
+
+      for (const hl of highlights) {
+        if (!hl.text) continue;
+        const nextSegments: Segment[] = [];
+
+        for (const seg of segments) {
+          if (seg.color || !seg.text.includes(hl.text)) {
+            nextSegments.push(seg);
+          } else {
+            const parts = seg.text.split(hl.text);
+            for (let i = 0; i < parts.length; i++) {
+              if (parts[i].length > 0) nextSegments.push({ text: parts[i] });
+              if (i < parts.length - 1)
+                nextSegments.push({ text: hl.text, color: hl.color });
+            }
+          }
+        }
+        segments = nextSegments;
+      }
+
+      renderedContent = (
+        <>
+          {segments.map((s, sIdx) =>
+            s.color ? (
+              <mark
+                key={sIdx}
+                style={{
+                  backgroundColor: s.color,
+                  color: "inherit",
+                  padding: "0 2px",
+                  borderRadius: "3px",
+                }}
+              >
+                {s.text}
+              </mark>
+            ) : (
+              <React.Fragment key={sIdx}>{s.text}</React.Fragment>
+            ),
+          )}
+        </>
+      );
+    } else if (lineText.length === 0) {
+      renderedContent = <span className="block h-[1em]">&nbsp;</span>;
+    }
+
     return (
       <div
         id={`reader-line-${idx}`}
         onClick={() => onLineClick(idx)}
         className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
       >
-        {lineText.length > 0 ? (
-          lineText
-        ) : (
-          <span className="block h-[1em]">&nbsp;</span>
-        )}
+        {renderedContent}
       </div>
     );
   },
   (prevProps, nextProps) => {
     return (
       prevProps.lineState === nextProps.lineState &&
-      prevProps.lineText === nextProps.lineText
+      prevProps.lineText === nextProps.lineText &&
+      JSON.stringify(prevProps.highlights) ===
+        JSON.stringify(nextProps.highlights)
     );
   },
 );
+
+type SelectionData = {
+  rect: DOMRect;
+  text: string;
+  lineEntries: { lineIdx: number; text: string }[];
+};
 
 export default function App() {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -246,11 +384,13 @@ export default function App() {
     activeBook?.currentLine || 0,
     currentActiveVoiceId,
   );
-
+  // Track if user explicitly initiated/tapped playback highlighting
+  const [showActiveLineHighlight, setShowActiveLineHighlight] = useState(false);
   const handleTogglePlay = useCallback(async () => {
     if (!activeBook || !voiceReady) return;
 
     if (!isPlaying) {
+      setShowActiveLineHighlight(true);
       await ensureAudioUnlocked();
       await requestScreenWakeLock();
     } else {
@@ -258,8 +398,13 @@ export default function App() {
     }
     togglePlay();
   }, [activeBook, voiceReady, isPlaying, togglePlay]);
+  useEffect(() => {
+    if (!isPlaying) {
+      // Optional: keep it or hide it on pause.
+      // If you want it only during active speech/tap, keep this:
+    }
+  }, [isPlaying]);
 
-  // === LINE BY LINE NAVIGATION LOGIC ===
   const handlePrevLine = useCallback(() => {
     if (!activeBook) return;
     if (currentLine > 0) {
@@ -280,9 +425,7 @@ export default function App() {
       jumpTo(currentPage + 1, 0);
     }
   }, [activeBook, currentLine, currentPage, jumpTo, ttsPages]);
-  // =====================================
 
-  // === GLOBAL KEYBOARD CONTROLS ===
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -306,7 +449,6 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleTogglePlay, handleNextLine, handlePrevLine]);
-  // ================================
 
   const handlePageJump = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -325,9 +467,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (activeBook) {
-      setGotoInput(String(currentPage + 1));
-    }
+    if (activeBook) setGotoInput(String(currentPage + 1));
   }, [currentPage, activeBook]);
 
   const ttsLines = ttsPages[currentPage] || [];
@@ -339,8 +479,21 @@ export default function App() {
   );
 
   const handleDisplayLineClick = async (displayIdx: number) => {
+    // If user is selecting text to highlight, don't trigger TTS line jump
+    const selection = window.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.toString().trim().length > 0
+    ) {
+      return;
+    }
+
     const sentenceIndices = displayToSentence[displayIdx] || [];
     if (sentenceIndices.length === 0) return;
+
+    // Enable playback line highlight on explicit tap/click
+    setShowActiveLineHighlight(true);
     await ensureAudioUnlocked();
     jumpTo(currentPage, sentenceIndices[0]);
   };
@@ -517,7 +670,6 @@ export default function App() {
       .find((c) => c.pageIndex <= currentPage);
   }, [activeChapters, currentPage]);
 
-  // === AUDIOBOOK SLEEP TIMER LOGIC ===
   const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
   const [sleepMins, setSleepMins] = useState<number | null>(null);
   const targetChapterPage = useRef<number | null>(null);
@@ -564,17 +716,177 @@ export default function App() {
       targetChapterPage.current = null;
     }
   };
-  // ===================================
+
+  const estimatedMinsLeft = activeBook
+    ? Math.ceil(((activeBook.totalPages - currentPage) * 1.5) / speed)
+    : 0;
+  const timeLeftStr =
+    estimatedMinsLeft > 60
+      ? `${Math.floor(estimatedMinsLeft / 60)}h ${estimatedMinsLeft % 60}m left`
+      : `${estimatedMinsLeft}m left`;
+
+  // === MULTI-LINE SELECTION & 6-COLOR HIGHLIGHTING ===
+  const [selectionParams, setSelectionParams] = useState<SelectionData | null>(
+    null,
+  );
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [dictWord, setDictWord] = useState<string | null>(null);
+  const [dictData, setDictData] = useState<any>(null);
+  const [dictLoading, setDictLoading] = useState(false);
+
+  const lookupWord = async (word: string) => {
+    const cleanWord = word.replace(/[.,;!?()""'’‘“”]/g, "").trim();
+    if (!cleanWord) return;
+
+    setDictWord(cleanWord);
+    setDictLoading(true);
+    setDictData(null);
+    try {
+      const res = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${cleanWord}`,
+      );
+      if (!res.ok) throw new Error("Not found");
+      const data = await res.json();
+      setDictData(data[0]);
+    } catch {
+      setDictData(null);
+    } finally {
+      setDictLoading(false);
+    }
+  };
+
+  const handleTextSelection = useCallback(() => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+        setSelectionParams(null);
+        setShowColorPicker(false);
+        return;
+      }
+
+      const fullSelectedText = sel.toString().trim();
+      if (!fullSelectedText) {
+        setSelectionParams(null);
+        setShowColorPicker(false);
+        return;
+      }
+
+      const range = sel.getRangeAt(0);
+      const startLineEl = (
+        range.startContainer.nodeType === Node.ELEMENT_NODE
+          ? (range.startContainer as Element)
+          : range.startContainer.parentElement
+      )?.closest(".reader-line");
+      const endLineEl = (
+        range.endContainer.nodeType === Node.ELEMENT_NODE
+          ? (range.endContainer as Element)
+          : range.endContainer.parentElement
+      )?.closest(".reader-line");
+
+      if (!startLineEl || !endLineEl) {
+        setSelectionParams(null);
+        setShowColorPicker(false);
+        return;
+      }
+
+      const startIdx = parseInt(startLineEl.id.replace("reader-line-", ""), 10);
+      const endIdx = parseInt(endLineEl.id.replace("reader-line-", ""), 10);
+      const minIdx = Math.min(startIdx, endIdx);
+      const maxIdx = Math.max(startIdx, endIdx);
+
+      const lineEntries: { lineIdx: number; text: string }[] = [];
+
+      for (let i = minIdx; i <= maxIdx; i++) {
+        const lineEl = document.getElementById(`reader-line-${i}`);
+        if (!lineEl) continue;
+
+        const lineText = lineEl.textContent || "";
+        if (!lineText) continue;
+
+        const lineRange = document.createRange();
+        lineRange.selectNodeContents(lineEl);
+
+        const testRange = range.cloneRange();
+        if (
+          testRange.compareBoundaryPoints(Range.START_TO_END, lineRange) > 0 &&
+          testRange.compareBoundaryPoints(Range.END_TO_START, lineRange) < 0
+        ) {
+          const subRange = document.createRange();
+          if (
+            testRange.compareBoundaryPoints(Range.START_TO_START, lineRange) <=
+            0
+          ) {
+            subRange.setStart(lineRange.startContainer, lineRange.startOffset);
+          } else {
+            subRange.setStart(testRange.startContainer, testRange.startOffset);
+          }
+
+          if (
+            testRange.compareBoundaryPoints(Range.END_TO_END, lineRange) >= 0
+          ) {
+            subRange.setEnd(lineRange.endContainer, lineRange.endOffset);
+          } else {
+            subRange.setEnd(testRange.endContainer, testRange.endOffset);
+          }
+
+          const partialText = subRange.toString().trim();
+          if (partialText) {
+            lineEntries.push({ lineIdx: i, text: partialText });
+          }
+        }
+      }
+
+      if (lineEntries.length === 0) {
+        setSelectionParams(null);
+        setShowColorPicker(false);
+        return;
+      }
+
+      const rect = range.getBoundingClientRect();
+      setSelectionParams({ rect, text: fullSelectedText, lineEntries });
+      setShowColorPicker(false);
+    }, 50);
+  }, []);
+
+  const handleApplyColor = async (color: string) => {
+    if (!activeBook || !selectionParams) return;
+
+    const newHighlights = { ...(activeBook.highlights || {}) };
+    const highlightId = `hl_${Date.now()}`;
+    const updates = selectionParams.lineEntries.map((entry) => {
+      const key = `${currentPage}-${entry.lineIdx}`;
+      if (!newHighlights[key]) newHighlights[key] = [];
+      newHighlights[key].push({ id: highlightId, text: entry.text, color });
+      return {
+        page: currentPage,
+        line: entry.lineIdx,
+        text: entry.text,
+        color,
+      };
+    });
+
+    setActiveBook({ ...activeBook, highlights: newHighlights });
+    await applyMultiLineHighlight(activeBook.id, updates);
+
+    window.getSelection()?.removeAllRanges();
+    setSelectionParams(null);
+    setShowColorPicker(false);
+  };
 
   return (
     <div
       className="app-shell min-h-screen flex flex-col font-sans"
       data-theme={theme}
+      onClick={() => {
+        if (selectionParams) {
+          window.getSelection()?.removeAllRanges();
+          setSelectionParams(null);
+          setShowColorPicker(false);
+        }
+      }}
     >
       <header
-        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${
-          navbarHidden ? "hidden" : ""
-        }`}
+        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""}`}
       >
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
           <div className="app-control flex flex-wrap sm:flex-nowrap items-center gap-2 px-2.5 py-1.5 rounded-lg w-full sm:w-auto">
@@ -770,7 +1082,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* === MOBILE BOTTOM FLOATING PLAYER === */}
       {compactChrome && activeBook && (
         <div
           className={`fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-[400px] z-40 transition-all duration-300 ${
@@ -780,17 +1091,20 @@ export default function App() {
           }`}
         >
           <div className="app-panel shadow-2xl rounded-3xl p-4 flex flex-col gap-3 border border-[var(--panel-border)] backdrop-blur-xl bg-opacity-95 dark:bg-opacity-95">
-            {/* Track Info */}
             <div className="flex flex-col items-center text-center px-4">
               <h4 className="text-sm font-bold text-[var(--app-text)] truncate w-full">
                 {formattedActiveTitle}
               </h4>
-              <p className="text-[11px] text-[var(--accent)] font-semibold mt-0.5 truncate w-full">
-                {currentChapter?.title || `Page ${currentPage + 1}`}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5 justify-center w-full">
+                <p className="text-[11px] text-[var(--accent)] font-semibold truncate">
+                  {currentChapter?.title || `Page ${currentPage + 1}`}
+                </p>
+                <span className="px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[9px] uppercase font-bold tracking-wider opacity-80">
+                  {timeLeftStr}
+                </span>
+              </div>
             </div>
 
-            {/* Playback Controls (With line-by-line navigation) */}
             <div className="flex items-center justify-center gap-3 sm:gap-4 mt-1">
               <button
                 onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
@@ -847,7 +1161,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Minimal Speed Control */}
             <div className="flex items-center justify-between gap-3 px-3 mt-1">
               <span className="text-[10px] app-muted uppercase tracking-wider font-bold">
                 Speed
@@ -868,7 +1181,6 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* ========================================= */}
 
       {navbarHidden && compactChrome && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
@@ -881,6 +1193,67 @@ export default function App() {
               Show Controls
             </span>
           </button>
+        </div>
+      )}
+
+      {/* Floating Selection Toolbar & 6-Color Picker */}
+      {selectionParams && (
+        <div
+          className="fixed z-50 flex items-center gap-1 app-panel border border-[var(--panel-border)] shadow-2xl rounded-lg p-1 animate-in fade-in zoom-in duration-200"
+          style={{
+            top: Math.max(10, selectionParams.rect.top - 50),
+            left: Math.max(
+              10,
+              Math.min(
+                window.innerWidth - 250,
+                selectionParams.rect.left +
+                  selectionParams.rect.width / 2 -
+                  100,
+              ),
+            ),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {!showColorPicker ? (
+            <>
+              {selectionParams.text.split(/\s+/).length <= 3 && (
+                <button
+                  onClick={() => {
+                    lookupWord(selectionParams.text);
+                    window.getSelection()?.removeAllRanges();
+                    setSelectionParams(null);
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition cursor-pointer"
+                >
+                  📖 Define
+                </button>
+              )}
+              <button
+                onClick={() => setShowColorPicker(true)}
+                className="px-3 py-1.5 text-xs font-bold hover:bg-black/5 dark:hover:bg-white/10 rounded transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <span className="w-3 h-3 rounded-full bg-yellow-300"></span>{" "}
+                Highlight
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5 px-1 py-0.5">
+              {HIGHLIGHT_COLORS.map((col) => (
+                <button
+                  key={col.label}
+                  onClick={() => handleApplyColor(col.value)}
+                  title={col.label}
+                  className={`w-6 h-6 rounded-full ${col.bg} border border-black/10 hover:scale-110 active:scale-95 transition cursor-pointer shadow-xs`}
+                />
+              ))}
+              <button
+                onClick={() => setShowColorPicker(false)}
+                className="ml-1 p-1 text-xs opacity-60 hover:opacity-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -914,6 +1287,11 @@ export default function App() {
                 {currentChapter && (
                   <span className="ml-2 font-normal opacity-70 hidden md:inline">
                     • {currentChapter.title}
+                  </span>
+                )}
+                {activeBook && (
+                  <span className="ml-2 px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 text-[10px] uppercase font-bold tracking-wider opacity-80 hidden md:inline-block">
+                    ⏱ {timeLeftStr}
                   </span>
                 )}
               </span>
@@ -1017,7 +1395,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Reading text body */}
           <div
             ref={scrollContainerRef}
             onClick={() => {
@@ -1025,6 +1402,8 @@ export default function App() {
                 setNavbarHidden((prev) => !prev);
               }
             }}
+            onMouseUp={handleTextSelection}
+            onTouchEnd={handleTextSelection}
             className={`px-3 py-4 sm:px-6 md:p-10 flex-1 overflow-y-auto relative ${isFullscreen ? "h-full max-h-none" : "max-h-[75vh]"}`}
           >
             {activeBook ? (
@@ -1038,15 +1417,25 @@ export default function App() {
               >
                 {displayedLines.map((line, idx) => {
                   const sentenceIndices = displayToSentence[idx] || [];
-                  const isCurrent = sentenceIndices.includes(currentLine);
-                  const lineState = isCurrent ? "is-current" : "is-pending";
 
+                  // CRITICAL FIX: Suppress TTS active line highlight while selecting text
+                  // Only show if user explicitly clicked/tapped AND selection is not active
+                  const isSynthesizing = sentenceIndices.includes(currentLine);
+                  const isCurrent =
+                    isSynthesizing &&
+                    !selectionParams &&
+                    (isPlaying || showActiveLineHighlight);
+
+                  const lineState = isCurrent ? "is-current" : "is-pending";
+                  const hlItems =
+                    activeBook.highlights?.[`${currentPage}-${idx}`];
                   return (
                     <MemoizedReaderLine
                       key={idx}
                       idx={idx}
                       lineText={line}
                       lineState={lineState}
+                      highlights={hlItems}
                       onLineClick={handleDisplayLineClick}
                     />
                   );
@@ -1060,10 +1449,8 @@ export default function App() {
             )}
           </div>
 
-          {/* === DOCKED PLAYBACK TOOLBAR (Desktop Only) === */}
           {!compactChrome && activeBook && (
             <div className="border-t border-[var(--panel-border)] bg-[var(--app-bg)]/90 backdrop-blur px-3 py-2 sm:py-3 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-20">
-              {/* Speed (Left) */}
               <div className="flex items-center justify-between w-full sm:w-auto gap-3 px-2 sm:px-0 order-2 sm:order-1">
                 <span className="text-[10px] app-muted uppercase tracking-wider font-bold">
                   Speed
@@ -1082,7 +1469,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Playback Navigation Center (Middle) */}
               <div className="flex items-center justify-center gap-4 sm:gap-6 order-1 sm:order-2 w-full sm:w-auto">
                 <button
                   onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
@@ -1144,11 +1530,9 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Spacer for aesthetic centering on Desktop */}
               <div className="hidden sm:block w-[120px] order-3"></div>
             </div>
           )}
-          {/* ================================= */}
         </main>
 
         <aside className="lg:col-span-4 flex flex-col">
@@ -1186,6 +1570,13 @@ export default function App() {
         chapters={activeChapters}
         currentPage={currentPage}
         onSelectChapter={(pageIdx) => jumpTo(pageIdx, 0)}
+      />
+
+      <DictionaryModal
+        word={dictWord}
+        data={dictData}
+        loading={dictLoading}
+        onClose={() => setDictWord(null)}
       />
     </div>
   );
