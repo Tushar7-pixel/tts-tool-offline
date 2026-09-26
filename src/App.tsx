@@ -927,7 +927,7 @@ export default function App() {
           {/* Reader Scrollable Viewport */}
           <div
             ref={scrollContainerRef}
-            className="px-4 py-6 sm:px-8 md:p-10 flex-1 min-h-0 overflow-y-auto relative"
+            className="px-3 py-4 sm:px-8 md:p-10 flex-1 min-h-0 overflow-y-auto relative pb-44 lg:pb-10"
           >
             {activeBook ? (
               <ReaderTextBody
