@@ -69,20 +69,24 @@ export const MobileFloatingPlayer: React.FC<MobileFloatingPlayerProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mt-1">
+          <div className="flex items-center justify-center gap-3 sm:gap-4 mt-1 text-[var(--app-text)]">
             <button
               onClick={onPrevPage}
               disabled={currentPage === 0}
-              className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
+              className="opacity-75 hover:opacity-100 disabled:opacity-30 p-2 cursor-pointer transition flex items-center justify-center"
             >
-              ⏮
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                <path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" />
+              </svg>
             </button>
             <button
               onClick={onPrevLine}
               disabled={currentPage === 0 && currentLine === 0}
-              className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
+              className="opacity-75 hover:opacity-100 disabled:opacity-30 p-2 cursor-pointer transition flex items-center justify-center"
             >
-              ⏪
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                <path d="M11 18V6l-8.5 6 8.5 6zm.5-6l8.5 6V6l-8.5 6z" />
+              </svg>
             </button>
 
             <button
@@ -90,14 +94,21 @@ export const MobileFloatingPlayer: React.FC<MobileFloatingPlayerProps> = ({
               disabled={!voiceReady}
               className={`w-14 h-14 flex items-center justify-center rounded-full shadow-lg cursor-pointer transition shrink-0 ${
                 isPlaying ? "app-pause" : "app-play"
-              } disabled:opacity-25`}
+              } disabled:opacity-25 border border-[var(--panel-border)]`}
             >
               {engineStatus !== "idle" ? (
                 <span className="inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin" />
               ) : isPlaying ? (
-                <span className="text-xl">⏸</span>
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
               ) : (
-                <span className="text-xl ml-1">▶</span>
+                <svg
+                  className="w-5 h-5 fill-current ml-0.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M8 5v14l11-7z" />
+                </svg>
               )}
             </button>
 
@@ -106,16 +117,20 @@ export const MobileFloatingPlayer: React.FC<MobileFloatingPlayerProps> = ({
               disabled={
                 currentPage >= totalPages - 1 && currentLine >= totalLines - 1
               }
-              className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
+              className="opacity-75 hover:opacity-100 disabled:opacity-30 p-2 cursor-pointer transition flex items-center justify-center"
             >
-              ⏩
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z" />
+              </svg>
             </button>
             <button
               onClick={onNextPage}
               disabled={currentPage >= totalPages - 1}
-              className="app-muted hover:text-[var(--app-text)] disabled:opacity-30 text-lg p-1 cursor-pointer transition flex items-center justify-center"
+              className="opacity-75 hover:opacity-100 disabled:opacity-30 p-2 cursor-pointer transition flex items-center justify-center"
             >
-              ⏭
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
+              </svg>
             </button>
           </div>
 

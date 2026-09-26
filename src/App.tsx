@@ -539,15 +539,16 @@ export default function App() {
                 if (!isNaN(p) && p >= 1 && p <= activeBook.totalPages)
                   jumpTo(p - 1, 0);
               }}
-              className="app-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+              className="app-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--control-border)]"
             >
               <button
                 type="button"
                 disabled={currentPage === 0}
                 onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                className="px-2 py-1 text-xs app-muted disabled:opacity-20 cursor-pointer"
+                className="px-2 py-1 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-1"
               >
-                ◀ Prev
+                <span className="text-sm leading-none font-bold">‹</span>
+                <span>Prev</span>
               </button>
               <span className="app-muted text-xs">Pg</span>
               <input
@@ -556,7 +557,7 @@ export default function App() {
                 max={activeBook.totalPages}
                 value={gotoInput}
                 onChange={(e) => setGotoInput(e.target.value)}
-                className="app-input w-11 rounded text-center text-xs font-bold py-0.5"
+                className="app-input w-11 rounded text-center text-xs font-bold py-0.5 border border-[var(--control-border)]"
               />
               <span className="text-xs app-muted">
                 / {activeBook.totalPages}
@@ -576,9 +577,10 @@ export default function App() {
                     0,
                   )
                 }
-                className="px-2 py-1 text-xs app-muted disabled:opacity-20 cursor-pointer"
+                className="px-2 py-1 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-1"
               >
-                Next ▶
+                <span>Next</span>
+                <span className="text-sm leading-none font-bold">›</span>
               </button>
             </form>
           )}

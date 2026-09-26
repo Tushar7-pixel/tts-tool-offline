@@ -1,5 +1,16 @@
+// src/utils/readerAppearance.ts
+
 export type ReaderTheme = "dark" | "ereader";
-export type ReaderFontId = "sans" | "hand" | "serif" | "mono";
+
+export type ReaderFontId =
+  | "hand"
+  | "caveat"
+  | "merriweather"
+  | "serif"
+  | "lora"
+  | "hyperlegible"
+  | "sans"
+  | "mono";
 
 export type ReaderFontOption = {
   id: ReaderFontId;
@@ -13,16 +24,18 @@ const FONT_KEY = "piper-reader-font";
 
 export const READER_FONTS: ReaderFontOption[] = [
   {
-    id: "sans",
-    label: "Standard Sans",
-    cssFamily: "ui-sans-serif, system-ui, sans-serif",
-  },
-  {
     id: "hand",
-    label: "Hand-drawn",
+    label: "Handwritten",
     cssFamily: '"Patrick Hand", "Comic Sans MS", cursive',
     googleHref:
       "https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap",
+  },
+  {
+    id: "caveat",
+    label: "Playful Script",
+    cssFamily: '"Caveat", cursive',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap",
   },
   {
     id: "serif",
@@ -30,6 +43,34 @@ export const READER_FONTS: ReaderFontOption[] = [
     cssFamily: 'Literata, Georgia, "Times New Roman", serif',
     googleHref:
       "https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600&display=swap",
+  },
+  {
+    id: "merriweather",
+    label: "Modern Editorial",
+    cssFamily: '"Merriweather", Georgia, serif',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;1,300&display=swap",
+  },
+  {
+    id: "lora",
+    label: "Literary Serif",
+    cssFamily: '"Lora", serif',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&display=swap",
+  },
+  {
+    id: "hyperlegible",
+    label: "Hyperlegible",
+    cssFamily: '"Atkinson Hyperlegible", system-ui, sans-serif',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap",
+  },
+  {
+    id: "sans",
+    label: "Clean Sans",
+    cssFamily: '"Inter", ui-sans-serif, system-ui, sans-serif',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap",
   },
   {
     id: "mono",
@@ -43,9 +84,10 @@ export const READER_FONTS: ReaderFontOption[] = [
 export function loadReaderTheme(): ReaderTheme {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    return stored === "ereader" ? "ereader" : "dark";
+    // Defaults to "ereader" (Light mode)
+    return stored === "dark" ? "dark" : "ereader";
   } catch {
-    return "dark";
+    return "ereader";
   }
 }
 
@@ -58,7 +100,8 @@ export function loadReaderFontId(): ReaderFontId {
   } catch {
     /* ignore */
   }
-  return "sans";
+  // Defaults to "hand" (Handwritten)
+  return "hand";
 }
 
 export function saveReaderTheme(theme: ReaderTheme) {
