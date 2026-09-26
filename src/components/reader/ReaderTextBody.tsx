@@ -93,7 +93,7 @@ const MemoizedReaderLine = React.memo(
       <div
         id={`reader-line-${idx}`}
         onClick={() => onLineClick(idx)}
-        className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer ${lineState}`}
+        className={`reader-line px-1 sm:px-2 py-0.5 cursor-pointer select-text touch-manipulation ${lineState}`}
       >
         {renderedContent}
       </div>

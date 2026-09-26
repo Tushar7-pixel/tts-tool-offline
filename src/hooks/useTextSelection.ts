@@ -12,9 +12,12 @@ export function useTextSelection() {
     const [showColorPicker, setShowColorPicker] = useState(false);
     const toolbarRef = useRef<HTMLDivElement | null>(null);
     const isSelectingRef = useRef(false);
+    const touchStartPos = useRef<{ x: number; y: number } | null>(null);
 
     const clearSelection = useCallback(() => {
-        window.getSelection()?.removeAllRanges();
+        try {
+            window.getSelection()?.removeAllRanges();
+        } catch { }
         setSelectionParams(null);
         setShowColorPicker(false);
     }, []);
@@ -28,7 +31,8 @@ export function useTextSelection() {
         }
 
         const fullSelectedText = sel.toString().trim();
-        if (!fullSelectedText) {
+        // Ignore single stray tap selections or empty whitespace
+        if (!fullSelectedText || fullSelectedText.length === 0) {
             setSelectionParams(null);
             setShowColorPicker(false);
             return;
@@ -106,17 +110,14 @@ export function useTextSelection() {
         setSelectionParams({ rect, text: fullSelectedText, lineEntries });
     }, []);
 
-    // Listen for mouse/touch interactions across the document
     useEffect(() => {
         let timeoutId: number;
 
+        // Mouse handlers
         const onMouseDown = (e: MouseEvent) => {
-            // If clicking inside the toolbar itself, do nothing
             if (toolbarRef.current && toolbarRef.current.contains(e.target as Node)) {
                 return;
             }
-
-            // If user clicks anywhere else, check if they clicked outside text
             const target = e.target as HTMLElement;
             if (!target.closest(".reader-line")) {
                 clearSelection();
@@ -128,29 +129,65 @@ export function useTextSelection() {
         const onMouseUp = () => {
             if (isSelectingRef.current) {
                 isSelectingRef.current = false;
-                // Evaluate immediately when user releases mouse button
                 setTimeout(evaluateSelection, 30);
             }
         };
 
+        // Touch handlers (Mobile)
+        const onTouchStart = (e: TouchEvent) => {
+            if (toolbarRef.current && toolbarRef.current.contains(e.target as Node)) {
+                return;
+            }
+            if (e.touches.length === 1) {
+                touchStartPos.current = {
+                    x: e.touches[0].clientX,
+                    y: e.touches[0].clientY,
+                };
+            }
+        };
+
+        const onTouchEnd = (e: TouchEvent) => {
+            if (!touchStartPos.current) return;
+            const touch = e.changedTouches[0];
+            const dx = Math.abs(touch.clientX - touchStartPos.current.x);
+            const dy = Math.abs(touch.clientY - touchStartPos.current.y);
+
+            // If finger barely moved (< 8px), it's a tap, NOT a text selection drag.
+            // Clear selection so the line tap-to-speak executes cleanly.
+            if (dx < 8 && dy < 8) {
+                clearTimeout(timeoutId);
+                const sel = window.getSelection();
+                if (sel && sel.toString().trim().length === 0) {
+                    clearSelection();
+                }
+            } else {
+                // Drag gesture - evaluate potential highlight selection
+                setTimeout(evaluateSelection, 100);
+            }
+            touchStartPos.current = null;
+        };
+
         const onSelectionChange = () => {
-            // Keep mobile touch support working via selectionchange
             clearTimeout(timeoutId);
             timeoutId = window.setTimeout(() => {
                 if (!isSelectingRef.current) {
                     evaluateSelection();
                 }
-            }, 80);
+            }, 120);
         };
 
         document.addEventListener("mousedown", onMouseDown);
         document.addEventListener("mouseup", onMouseUp);
+        document.addEventListener("touchstart", onTouchStart, { passive: true });
+        document.addEventListener("touchend", onTouchEnd, { passive: true });
         document.addEventListener("selectionchange", onSelectionChange);
 
         return () => {
             clearTimeout(timeoutId);
             document.removeEventListener("mousedown", onMouseDown);
             document.removeEventListener("mouseup", onMouseUp);
+            document.removeEventListener("touchstart", onTouchStart);
+            document.removeEventListener("touchend", onTouchEnd);
             document.removeEventListener("selectionchange", onSelectionChange);
         };
     }, [evaluateSelection, clearSelection]);

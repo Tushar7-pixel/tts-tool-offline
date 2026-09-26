@@ -123,7 +123,7 @@ export default function App() {
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
-
+  const [isFullscreen, setIsFullscreen] = useState(false);
   // Drawer & Modal toggles
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
@@ -160,6 +160,28 @@ export default function App() {
     toolbarRef,
   } = useTextSelection();
 
+  const toggleFullscreen = async () => {
+    const next = !isFullscreen;
+    setIsFullscreen(next);
+
+    if (document.fullscreenEnabled) {
+      try {
+        if (next && !document.fullscreenElement) {
+          await readerContainerRef.current?.requestFullscreen?.();
+        } else if (!next && document.fullscreenElement) {
+          await document.exitFullscreen?.();
+        }
+      } catch {}
+    }
+  };
+
+  useEffect(() => {
+    const handleFsChange = () =>
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", handleFsChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
   // Voice setup
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
     const saved = localStorage.getItem("echoread_installed_voices");
@@ -418,10 +440,23 @@ export default function App() {
   );
 
   const handleDisplayLineClick = async (displayIdx: number) => {
+    // If the user has an active highlighted snippet toolbar open, don't interrupt
+    if (selectionParams) return;
+
+    // Check if an actual drag selection is in progress
     const sel = window.getSelection();
-    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 1) {
+      return;
+    }
+
+    // Clear any lingering single-character caret to prevent mobile selection lock
+    if (sel && !sel.isCollapsed) {
+      sel.removeAllRanges();
+    }
+
     const sentenceIndices = displayToSentence[displayIdx] || [];
     if (!sentenceIndices.length) return;
+
     await ensureAudioUnlocked();
     jumpTo(currentPage, sentenceIndices[0]);
   };
@@ -760,7 +795,11 @@ export default function App() {
       <div className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:min-h-0 lg:overflow-hidden">
         <main
           ref={readerContainerRef}
-          className="app-panel flex flex-col shadow-xl overflow-hidden relative lg:col-span-8 lg:h-full rounded-lg"
+          className={`app-panel flex flex-col shadow-xl overflow-hidden relative ${
+            isFullscreen
+              ? "fixed inset-0 z-50 w-screen h-[100dvh] rounded-none border-none"
+              : "lg:col-span-8 lg:h-full rounded-lg"
+          }`}
         >
           {/* Reader Panel Subheader */}
           <div className="app-panel-header px-4 py-2.5 flex items-center justify-between text-xs shrink-0 relative z-20">
@@ -830,8 +869,10 @@ export default function App() {
               )}
 
               {/* Font Sizer */}
+              {/* Font Sizer */}
               <div className="app-control flex items-center gap-1 px-1 py-0.5 rounded">
                 <button
+                  type="button"
                   onClick={() => setFontSize((s) => Math.max(12, s - 1))}
                   className="px-1 text-[11px] font-bold cursor-pointer"
                 >
@@ -841,12 +882,39 @@ export default function App() {
                   {fontSize}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setFontSize((s) => Math.min(28, s + 1))}
                   className="px-1 text-[11px] font-bold cursor-pointer"
                 >
                   A+
                 </button>
               </div>
+
+              {/* Fullscreen Toggle Button */}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                title={
+                  isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
+                }
+                className={`p-1.5 rounded border border-[var(--control-border)] cursor-pointer transition flex items-center justify-center ${
+                  isFullscreen
+                    ? "bg-[var(--app-text)] text-[var(--app-bg)]"
+                    : "app-btn text-[var(--app-text)]"
+                }`}
+              >
+                {isFullscreen ? (
+                  /* Exit Fullscreen Icon */
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
+                  </svg>
+                ) : (
+                  /* Enter Fullscreen Icon */
+                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 
