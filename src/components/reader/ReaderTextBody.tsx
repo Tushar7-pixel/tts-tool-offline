@@ -116,6 +116,7 @@ interface ReaderTextBodyProps {
   highlights?: Record<string, HighlightItem[]>;
   fontSize: number;
   fontFamily: string;
+  orientation?: "portrait" | "landscape";
   onLineClick: (displayIdx: number) => void;
   onHighlightClick: (
     item: HighlightItem,
@@ -132,16 +133,21 @@ export const ReaderTextBody: React.FC<ReaderTextBodyProps> = ({
   highlights,
   fontSize,
   fontFamily,
+  orientation = "portrait",
   onLineClick,
   onHighlightClick,
 }) => {
+  const isLandscape = orientation === "landscape";
+
   return (
     <div
-      className="text-left max-w-3xl mx-auto space-y-2 pb-6"
+      className={`text-left mx-auto space-y-2 pb-6 transition-all duration-200 ${
+        isLandscape ? "max-w-5xl md:columns-2 md:gap-12" : "max-w-3xl"
+      }`}
       style={{
         fontFamily,
         fontSize: `${fontSize}px`,
-        lineHeight: 1.7,
+        lineHeight: 1.75,
       }}
     >
       {displayedLines.map((line, idx) => {

@@ -104,8 +104,7 @@ export default defineConfig({
         theme_color: '#0e0f12',
         background_color: '#0e0f12',
         display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
+        orientation: 'any', // <-- Change from 'portrait' to 'any'        start_url: '/',
         id: '/?source=pwa',
         icons: [
           {

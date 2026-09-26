@@ -131,7 +131,68 @@ export default function App() {
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [streakDays, setStreakDays] = useState(0);
   const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
+  const [orientation, setOrientation] = useState<"portrait" | "landscape">(
+    "portrait",
+  );
 
+  const toggleOrientation = async () => {
+    const nextOrientation =
+      orientation === "portrait" ? "landscape" : "portrait";
+    setOrientation(nextOrientation);
+
+    // Trigger hardware rotation on supported mobile devices
+    if ("screen" in window && "orientation" in window.screen) {
+      try {
+        const screenOrientation = window.screen.orientation as any;
+        if (nextOrientation === "landscape") {
+          // Attempt to lock to landscape; falls back safely if user has not unlocked screen
+          if (screenOrientation.lock) {
+            await screenOrientation.lock("landscape");
+          }
+        } else {
+          if (screenOrientation.lock) {
+            await screenOrientation.lock("portrait");
+          } else if (screenOrientation.unlock) {
+            screenOrientation.unlock();
+          }
+        }
+      } catch (err) {
+        // Many mobile browsers require fullscreen before allowing orientation.lock
+        try {
+          if (
+            !document.fullscreenElement &&
+            readerContainerRef.current?.requestFullscreen
+          ) {
+            await readerContainerRef.current.requestFullscreen();
+            const screenOrientation = window.screen.orientation as any;
+            if (screenOrientation.lock) {
+              await screenOrientation.lock(
+                nextOrientation === "landscape" ? "landscape" : "portrait",
+              );
+            }
+          }
+        } catch {
+          // Soft layout fallback will still apply via CSS
+        }
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleOrientationChange = () => {
+      const isLand = window.matchMedia("(orientation: landscape)").matches;
+      setOrientation(isLand ? "landscape" : "portrait");
+    };
+
+    window.addEventListener("orientationchange", handleOrientationChange);
+    const mql = window.matchMedia("(orientation: landscape)");
+    mql.addEventListener("change", handleOrientationChange);
+
+    return () => {
+      window.removeEventListener("orientationchange", handleOrientationChange);
+      mql.removeEventListener("change", handleOrientationChange);
+    };
+  }, []);
   // Existing highlight interaction popover
   const [activeHighlightPopover, setActiveHighlightPopover] = useState<{
     item: HighlightItem;
@@ -815,7 +876,27 @@ export default function App() {
                   <span className="hidden md:inline">Chapters</span>
                 </button>
               )}
-
+              {/* Floating Orientation Toggle (E-Ink Style) */}
+              {activeBook && (
+                <button
+                  type="button"
+                  onClick={toggleOrientation}
+                  title={`Switch to ${orientation === "portrait" ? "Landscape / Wide" : "Portrait"} mode`}
+                  className="fixed bottom-24 right-4 z-40 app-panel border border-[var(--panel-border)] p-2.5 rounded-full shadow-lg cursor-pointer hover:bg-[var(--btn-hover)] transition flex items-center justify-center text-[var(--app-text)] font-mono text-xs select-none"
+                >
+                  {orientation === "portrait" ? (
+                    /* Landscape indicator icon */
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                      <path d="M19 7H5c-1.1 0-2 .9-2 2v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm0 8H5V9h14v6z" />
+                    </svg>
+                  ) : (
+                    /* Portrait indicator icon */
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                      <path d="M17 3H7c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H7V5h10v14z" />
+                    </svg>
+                  )}
+                </button>
+              )}
               {activeBook && (
                 <button
                   type="button"
@@ -925,6 +1006,7 @@ export default function App() {
           </div>
 
           {/* Reader Scrollable Viewport */}
+          {/* Reader Scrollable Viewport */}
           <div
             ref={scrollContainerRef}
             className="px-3 py-4 sm:px-8 md:p-10 flex-1 min-h-0 overflow-y-auto relative pb-44 lg:pb-10"
@@ -938,6 +1020,7 @@ export default function App() {
                 highlights={activeBook.highlights}
                 fontSize={fontSize}
                 fontFamily={readerFont.cssFamily}
+                orientation={orientation}
                 onLineClick={handleDisplayLineClick}
                 onHighlightClick={handleHighlightClick}
               />
