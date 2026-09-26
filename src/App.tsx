@@ -35,6 +35,7 @@ import { ReaderTextBody } from "./components/reader/ReaderTextBody";
 import { HighlightToolbar } from "./components/reader/HighlightToolbar";
 import { DesktopPlaybackDock } from "./components/player/DesktopPlaybackDock";
 import { MobileFloatingPlayer } from "./components/player/MobileFloatingPlayer";
+import { VoiceControls } from "./components/VoiceControls";
 import {
   getReaderFont,
   loadGoogleFont,
@@ -45,11 +46,7 @@ import {
   type ReaderFontId,
   type ReaderTheme,
 } from "./utils/readerAppearance";
-import {
-  ensureAudioUnlocked,
-  requestScreenWakeLock,
-  releaseScreenWakeLock,
-} from "./utils/backgroundAudio";
+import { ensureAudioUnlocked } from "./utils/backgroundAudio";
 import { updateMediaSessionState } from "./utils/mediaSession";
 
 function DictionaryModal({
@@ -114,6 +111,7 @@ export default function App() {
   const readerContainerRef = useRef<HTMLElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // App core state
   const [books, setBooks] = useState<BookDoc[]>([]);
   const [activeBook, setActiveBook] = useState<BookDoc | null>(null);
   const [voiceReady, setVoiceReady] = useState(false);
@@ -125,6 +123,8 @@ export default function App() {
   const [theme, setTheme] = useState<ReaderTheme>(() => loadReaderTheme());
   const [fontId, setFontId] = useState<ReaderFontId>(() => loadReaderFontId());
   const [engineStatus, setEngineStatus] = useState<TtsEngineStatus>("idle");
+
+  // Drawer & Modal toggles
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isChapterDrawerOpen, setIsChapterDrawerOpen] = useState(false);
   const [isAnnotationsOpen, setIsAnnotationsOpen] = useState(false);
@@ -132,7 +132,7 @@ export default function App() {
   const [streakDays, setStreakDays] = useState(0);
   const [activeChapters, setActiveChapters] = useState<ChapterItem[]>([]);
 
-  // Selected existing highlight popup state (for tap-to-delete/note)
+  // Existing highlight interaction popover
   const [activeHighlightPopover, setActiveHighlightPopover] = useState<{
     item: HighlightItem;
     lineIdx: number;
@@ -141,17 +141,17 @@ export default function App() {
   const [editingPopoverNote, setEditingPopoverNote] = useState(false);
   const [popoverNoteInput, setPopoverNoteInput] = useState("");
 
-  // Sleep Timer States
+  // Sleep timer
   const [sleepMode, setSleepMode] = useState<number | "chapter" | null>(null);
   const [sleepMins, setSleepMins] = useState<number | null>(null);
   const targetChapterPage = useRef<number | null>(null);
 
-  // Dictionary States
+  // Dictionary state
   const [dictWord, setDictWord] = useState<string | null>(null);
   const [dictData, setDictData] = useState<any>(null);
   const [dictLoading, setDictLoading] = useState(false);
 
-  // Custom Text Selection Hook
+  // Selection hook
   const {
     selectionParams,
     showColorPicker,
@@ -160,7 +160,7 @@ export default function App() {
     toolbarRef,
   } = useTextSelection();
 
-  // Voice Management States
+  // Voice setup
   const [installedVoiceIds, setInstalledVoiceIds] = useState<string[]>(() => {
     const saved = localStorage.getItem("echoread_installed_voices");
     return saved ? JSON.parse(saved) : ["en_US-hfc_male-medium"];
@@ -174,11 +174,11 @@ export default function App() {
       localStorage.getItem("echoread_female_voice") ||
       "en_US-hfc_female-medium",
   );
-  const [activeGender] = useState<"male" | "female">("male");
-
+  const [activeGender, setActiveGender] = useState<"male" | "female">("male");
   const currentActiveVoiceId =
     activeGender === "male" ? maleVoiceId : femaleVoiceId || maleVoiceId;
 
+  // TTS pages memo
   const ttsPages = useMemo(() => {
     if (!activeBook?.pages) return [];
     return activeBook.pages.map((page) =>
@@ -186,6 +186,7 @@ export default function App() {
     );
   }, [activeBook?.pages]);
 
+  // Main reader hook
   const {
     currentPage,
     currentLine,
@@ -209,6 +210,7 @@ export default function App() {
     setStreakDays(stats.currentStreak || 0);
   };
 
+  // Sync theme & font changes to DOM and localStorage
   useEffect(() => {
     const font = getReaderFont(fontId);
     document.documentElement.dataset.theme = theme;
@@ -218,11 +220,15 @@ export default function App() {
     if (font.googleHref) loadGoogleFont(font.googleHref);
   }, [theme, fontId]);
 
+  // Initialize engine status & library
   useEffect(() => {
     isVoiceInstalled().then(setVoiceReady);
     loadBooks();
+    const unsub = subscribeTtsStatus(setEngineStatus);
+    return () => unsub();
   }, []);
 
+  // Responsive layout detection
   useEffect(() => {
     const updateChrome = () => {
       const mobile = window.matchMedia("(max-width: 1023px)").matches;
@@ -237,23 +243,15 @@ export default function App() {
     return () => window.removeEventListener("resize", updateChrome);
   }, []);
 
-  useEffect(() => {
-    return subscribeTtsStatus(setEngineStatus);
-  }, []);
-
+  // Update OS Media Session state
   useEffect(() => {
     updateMediaSessionState(isPlaying);
-    if (!isPlaying) releaseScreenWakeLock();
   }, [isPlaying]);
 
+  // Audio unlock and toggle wrapper
   const handleTogglePlay = useCallback(async () => {
     if (!activeBook || !voiceReady) return;
-    if (!isPlaying) {
-      await ensureAudioUnlocked();
-      await requestScreenWakeLock();
-    } else {
-      releaseScreenWakeLock();
-    }
+    if (!isPlaying) await ensureAudioUnlocked();
     togglePlay();
   }, [activeBook, voiceReady, isPlaying, togglePlay]);
 
@@ -278,51 +276,27 @@ export default function App() {
     }
   }, [activeBook, currentLine, currentPage, jumpTo, ttsPages]);
 
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      )
-        return;
-      if (e.code === "Space") {
-        e.preventDefault();
-        handleTogglePlay();
-      } else if (e.code === "ArrowRight") {
-        e.preventDefault();
-        handleNextLine();
-      } else if (e.code === "ArrowLeft") {
-        e.preventDefault();
-        handlePrevLine();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleTogglePlay, handleNextLine, handlePrevLine]);
-
-  // Page synchronization
+  // Sync page input field
   useEffect(() => {
     if (activeBook) setGotoInput(String(currentPage + 1));
   }, [currentPage, activeBook]);
 
-  // Chapter Parsing Fallback
+  // Sync chapters from book doc or parse display text once
   useEffect(() => {
-    if (!activeBook) return setActiveChapters([]);
-    if (activeBook.chapters?.length)
-      return setActiveChapters(activeBook.chapters);
+    if (!activeBook) {
+      setActiveChapters([]);
+      return;
+    }
+    if (activeBook.chapters?.length) {
+      setActiveChapters(activeBook.chapters);
+      return;
+    }
     if (activeBook.displayPages?.length) {
-      setTimeout(
-        () =>
-          setActiveChapters(
-            parseChaptersFromDisplayPages(activeBook.displayPages!),
-          ),
-        0,
-      );
+      setActiveChapters(parseChaptersFromDisplayPages(activeBook.displayPages));
     }
   }, [activeBook]);
 
-  // Sleep Timer Interval Watcher
+  // Sleep timer interval
   useEffect(() => {
     if (typeof sleepMode !== "number") return;
     const interval = setInterval(() => {
@@ -338,7 +312,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [sleepMode, isPlaying, handleTogglePlay]);
 
-  // Sleep Timer Chapter Boundary Watcher
+  // Sleep timer chapter boundary check
   useEffect(() => {
     if (
       sleepMode === "chapter" &&
@@ -407,7 +381,6 @@ export default function App() {
     clearSelection();
   };
 
-  // Direct Highlight Click Handler
   const handleHighlightClick = useCallback(
     (item: HighlightItem, lineIdx: number, rect: DOMRect) => {
       setActiveHighlightPopover({ item, lineIdx, rect });
@@ -460,13 +433,6 @@ export default function App() {
       .find((c) => c.pageIndex <= currentPage);
   }, [activeChapters, currentPage]);
 
-  const estimatedMinsLeft = activeBook
-    ? Math.ceil(((activeBook.totalPages - currentPage) * 1.5) / speed)
-    : 0;
-  const timeLeftStr =
-    estimatedMinsLeft > 60
-      ? `${Math.floor(estimatedMinsLeft / 60)}h ${estimatedMinsLeft % 60}m left`
-      : `${estimatedMinsLeft}m left`;
   const readerFont = getReaderFont(fontId);
   const formattedActiveTitle = activeBook
     ? cleanBookTitle(activeBook.title)
@@ -482,7 +448,7 @@ export default function App() {
     >
       {/* Header */}
       <header
-        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2.5 ${navbarHidden ? "hidden" : ""}`}
+        className={`app-header sticky top-0 z-30 px-3 sm:px-4 py-2 ${navbarHidden ? "hidden" : ""}`}
       >
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2.5">
           <div className="app-control flex flex-wrap sm:flex-nowrap items-center gap-2 px-2.5 py-1.5 rounded-lg w-full sm:w-auto">
@@ -539,15 +505,15 @@ export default function App() {
                 if (!isNaN(p) && p >= 1 && p <= activeBook.totalPages)
                   jumpTo(p - 1, 0);
               }}
-              className="app-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[var(--control-border)]"
+              className="app-control flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--control-border)]"
             >
               <button
                 type="button"
                 disabled={currentPage === 0}
                 onClick={() => jumpTo(Math.max(0, currentPage - 1), 0)}
-                className="px-2 py-1 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-1"
+                className="px-2 py-0.5 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-0.5"
               >
-                <span className="text-sm leading-none font-bold">‹</span>
+                <span className="text-sm font-bold">‹</span>
                 <span>Prev</span>
               </button>
               <span className="app-muted text-xs">Pg</span>
@@ -577,13 +543,31 @@ export default function App() {
                     0,
                   )
                 }
-                className="px-2 py-1 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-1"
+                className="px-2 py-0.5 text-xs text-[var(--app-text)] hover:opacity-75 disabled:opacity-20 cursor-pointer font-medium flex items-center gap-0.5"
               >
                 <span>Next</span>
-                <span className="text-sm leading-none font-bold">›</span>
+                <span className="text-sm font-bold">›</span>
               </button>
             </form>
           )}
+
+          {/* Voice Controls */}
+          <VoiceControls
+            voiceReady={voiceReady}
+            installedVoiceIds={installedVoiceIds}
+            maleVoiceId={maleVoiceId}
+            femaleVoiceId={femaleVoiceId}
+            activeGender={activeGender}
+            onSetGender={setActiveGender}
+            onToggleGender={() =>
+              setActiveGender((prev) => (prev === "male" ? "female" : "male"))
+            }
+            onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+            onInstallDefaultVoice={async () => {
+              await downloadVoice("en_US-hfc_male-medium", () => {});
+              setVoiceReady(true);
+            }}
+          />
 
           <div className="flex items-center gap-2">
             {/* Reading Streak Button */}
@@ -623,7 +607,7 @@ export default function App() {
         <MobileFloatingPlayer
           title={formattedActiveTitle}
           chapterTitle={currentChapter?.title}
-          timeLeftStr={timeLeftStr}
+          timeLeftStr={""}
           navbarHidden={navbarHidden}
           isPlaying={isPlaying}
           engineStatus={engineStatus}
@@ -814,7 +798,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Sleep Timer Trigger */}
+              {/* Sleep Timer */}
               {activeBook && (
                 <div className="relative group">
                   <button className="app-btn text-[11px] font-semibold px-2 py-1.5 rounded cursor-pointer">
@@ -844,6 +828,7 @@ export default function App() {
                   </div>
                 </div>
               )}
+
               {/* Font Sizer */}
               <div className="app-control flex items-center gap-1 px-1 py-0.5 rounded">
                 <button
@@ -975,7 +960,6 @@ export default function App() {
         onSelectChapter={(pageIdx) => jumpTo(pageIdx, 0)}
       />
 
-      {/* Annotations & Notes Drawer */}
       <AnnotationsDrawer
         isOpen={isAnnotationsOpen}
         onClose={() => setIsAnnotationsOpen(false)}
@@ -986,7 +970,6 @@ export default function App() {
         onSaveNote={handleSaveHighlightNote}
       />
 
-      {/* Reading Stats & Streaks Modal */}
       <ReadingStatsModal
         isOpen={isStatsOpen}
         onClose={() => setIsStatsOpen(false)}
