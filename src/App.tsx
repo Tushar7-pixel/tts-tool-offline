@@ -802,65 +802,76 @@ export default function App() {
           }`}
         >
           {/* Reader Panel Subheader */}
-          <div className="app-panel-header px-4 py-2.5 flex items-center justify-between text-xs shrink-0 relative z-20">
-            <div className="flex items-center gap-1.5 truncate">
+          <div className="app-panel-header px-2 sm:px-4 py-2 flex items-center justify-between text-xs shrink-0 relative z-20 gap-1.5 overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink min-w-0">
               {activeBook?.chapters && activeBook.chapters.length > 0 && (
                 <button
+                  type="button"
                   onClick={() => setIsChapterDrawerOpen(true)}
-                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1 shrink-0"
+                  className="app-btn text-xs font-semibold px-2 py-1 rounded cursor-pointer flex items-center gap-1 shrink-0"
                   title="Table of Contents"
                 >
-                  📑 <span className="hidden sm:inline">Chapters</span>
+                  <span>📑</span>
+                  <span className="hidden md:inline">Chapters</span>
                 </button>
               )}
 
               {activeBook && (
                 <button
+                  type="button"
                   onClick={() => setIsAnnotationsOpen(true)}
-                  className="app-btn text-xs font-semibold px-2 py-1.5 rounded cursor-pointer flex items-center gap-1 shrink-0"
+                  className="app-btn text-xs font-semibold px-2 py-1 rounded cursor-pointer flex items-center gap-1 shrink-0"
                   title="View all highlights and notes"
                 >
-                  📝 <span className="hidden sm:inline">Notes</span>
+                  <span>📝</span>
+                  <span className="hidden md:inline">Notes</span>
                 </button>
               )}
 
-              <span className="font-semibold truncate ml-1">
+              <span className="font-semibold truncate text-[11px] sm:text-xs ml-1 font-mono">
                 {activeBook
-                  ? `Page ${currentPage + 1} of ${activeBook.totalPages}`
+                  ? `P.${currentPage + 1}/${activeBook.totalPages}`
                   : "Document View"}
                 {currentChapter && (
-                  <span className="ml-2 opacity-70 hidden md:inline">
+                  <span className="ml-1 opacity-70 hidden lg:inline font-sans">
                     • {currentChapter.title}
                   </span>
                 )}
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               {/* Sleep Timer */}
               {activeBook && (
                 <div className="relative group">
-                  <button className="app-btn text-[11px] font-semibold px-2 py-1.5 rounded cursor-pointer">
-                    💤{" "}
-                    {sleepMins
-                      ? `${sleepMins}m`
-                      : sleepMode === "chapter"
-                        ? "Chap"
-                        : "Timer"}
+                  <button
+                    type="button"
+                    className="app-btn text-[11px] font-semibold px-1.5 sm:px-2 py-1 rounded cursor-pointer flex items-center gap-0.5"
+                  >
+                    <span>💤</span>
+                    <span className="hidden sm:inline">
+                      {sleepMins
+                        ? `${sleepMins}m`
+                        : sleepMode === "chapter"
+                          ? "Chap"
+                          : "Timer"}
+                    </span>
                   </button>
                   <div className="absolute top-full right-0 mt-1 hidden group-hover:flex flex-col app-panel border rounded-md shadow-xl w-32 z-50">
                     {[15, 30, 60].map((m) => (
                       <button
                         key={m}
+                        type="button"
                         onClick={() => startSleepTimer(m)}
-                        className="px-3 py-1.5 text-xs text-left hover:bg-black/10 cursor-pointer"
+                        className="px-3 py-1.5 text-xs text-left hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer"
                       >
                         {m} minutes
                       </button>
                     ))}
                     <button
+                      type="button"
                       onClick={() => startSleepTimer("chapter")}
-                      className="px-3 py-1.5 text-xs text-left hover:bg-black/10 cursor-pointer"
+                      className="px-3 py-1.5 text-xs text-left hover:bg-black/10 dark:hover:bg-white/10 cursor-pointer"
                     >
                       End of Chapter
                     </button>
@@ -869,8 +880,7 @@ export default function App() {
               )}
 
               {/* Font Sizer */}
-              {/* Font Sizer */}
-              <div className="app-control flex items-center gap-1 px-1 py-0.5 rounded">
+              <div className="app-control flex items-center px-0.5 sm:px-1 py-0.5 rounded">
                 <button
                   type="button"
                   onClick={() => setFontSize((s) => Math.max(12, s - 1))}
@@ -878,7 +888,7 @@ export default function App() {
                 >
                   A−
                 </button>
-                <span className="font-mono text-xs font-bold w-5 text-center">
+                <span className="font-mono text-[11px] sm:text-xs font-bold w-4 sm:w-5 text-center">
                   {fontSize}
                 </span>
                 <button
@@ -890,26 +900,22 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Fullscreen Toggle Button */}
+              {/* Fullscreen Button */}
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                title={
-                  isFullscreen ? "Exit Fullscreen (Esc)" : "Enter Fullscreen"
-                }
-                className={`p-1.5 rounded border border-[var(--control-border)] cursor-pointer transition flex items-center justify-center ${
+                title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                className={`p-1 sm:p-1.5 rounded border border-[var(--control-border)] cursor-pointer transition flex items-center justify-center ${
                   isFullscreen
                     ? "bg-[var(--app-text)] text-[var(--app-bg)]"
                     : "app-btn text-[var(--app-text)]"
                 }`}
               >
                 {isFullscreen ? (
-                  /* Exit Fullscreen Icon */
                   <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                     <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" />
                   </svg>
                 ) : (
-                  /* Enter Fullscreen Icon */
                   <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                     <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
                   </svg>
