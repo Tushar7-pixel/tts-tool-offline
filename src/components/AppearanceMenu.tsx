@@ -45,7 +45,7 @@ export const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   }, [open, onOpenChange]);
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative inline-block" ref={menuRef}>
       <button
         type="button"
         onClick={() => onOpenChange(!open)}
@@ -58,70 +58,93 @@ export const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
       </button>
 
       {open && (
-        <div
-          className="absolute right-0 top-full mt-2 w-64 p-3 z-50 rounded shadow-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--app-text)] flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-100"
-          style={{
-            backgroundColor: "var(--panel-bg)",
-            color: "var(--app-text)",
-          }}
-        >
-          {/* 4 Themes Selection Grid */}
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1.5 font-mono">
-              Reading Theme
-            </span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {THEME_OPTIONS.map((opt) => {
-                const isActive = theme === opt.id;
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => onThemeChange(opt.id)}
-                    className={`text-xs py-2 px-2.5 rounded text-left border transition cursor-pointer flex flex-col gap-0.5 ${
-                      isActive
-                        ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold border-transparent"
-                        : "bg-[var(--control-bg)] border-[var(--control-border)] hover:bg-black/5 dark:hover:bg-white/5"
-                    }`}
-                  >
-                    <span className="leading-tight">{opt.label}</span>
-                    <span className="text-[9px] opacity-70 font-normal">
-                      {opt.desc}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+        <>
+          {/* Backdrop for mobile only */}
+          <div
+            className="fixed inset-0 bg-black/40 z-50 md:hidden backdrop-blur-xs"
+            onClick={() => onOpenChange(false)}
+          />
 
-          {/* Reader Font Section */}
-          <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1.5 font-mono">
-              Reader Font
-            </span>
-            <div className="flex flex-col gap-1 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
-              {READER_FONTS.map((f) => {
-                const isSelected = fontId === f.id;
-                return (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => onFontChange(f.id)}
-                    className={`text-xs py-1.5 px-2.5 rounded text-left border border-transparent transition cursor-pointer flex items-center justify-between ${
-                      isSelected
-                        ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold"
-                        : "hover:bg-black/5 dark:hover:bg-white/5 text-[var(--app-text)]"
-                    }`}
-                    style={{ fontFamily: f.cssFamily }}
-                  >
-                    <span>{f.label}</span>
-                    {isSelected && <span className="text-[10px]">✓</span>}
-                  </button>
-                );
-              })}
+          {/* Dialog Container */}
+          <div
+            className="fixed inset-x-4 top-20 z-50 max-w-sm mx-auto p-4 rounded-xl shadow-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--app-text)] flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-150 md:absolute md:inset-auto md:right-0 md:top-full md:mt-2 md:w-64 md:p-3 md:rounded-md"
+            style={{
+              backgroundColor: "var(--panel-bg)",
+              color: "var(--app-text)",
+            }}
+          >
+            {/* Mobile Header with Close Button */}
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--panel-border)] md:hidden">
+              <span className="text-xs font-mono font-bold uppercase tracking-wider">
+                Appearance
+              </span>
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="p-1 text-xs opacity-70 hover:opacity-100 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 4 Themes Selection Grid */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1.5 font-mono">
+                Reading Theme
+              </span>
+              <div className="grid grid-cols-2 gap-1.5">
+                {THEME_OPTIONS.map((opt) => {
+                  const isActive = theme === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => onThemeChange(opt.id)}
+                      className={`text-xs py-2 px-2.5 rounded text-left border transition cursor-pointer flex flex-col gap-0.5 ${
+                        isActive
+                          ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold border-transparent"
+                          : "bg-[var(--control-bg)] border-[var(--control-border)] hover:bg-black/5 dark:hover:bg-white/5"
+                      }`}
+                    >
+                      <span className="leading-tight">{opt.label}</span>
+                      <span className="text-[9px] opacity-70 font-normal">
+                        {opt.desc}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Reader Font Section */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1.5 font-mono">
+                Reader Font
+              </span>
+              <div className="flex flex-col gap-1 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
+                {READER_FONTS.map((f) => {
+                  const isSelected = fontId === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => onFontChange(f.id)}
+                      className={`text-xs py-1.5 px-2.5 rounded text-left border border-transparent transition cursor-pointer flex items-center justify-between ${
+                        isSelected
+                          ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold"
+                          : "hover:bg-black/5 dark:hover:bg-white/5 text-[var(--app-text)]"
+                      }`}
+                      style={{ fontFamily: f.cssFamily }}
+                    >
+                      <span>{f.label}</span>
+                      {isSelected && <span className="text-[10px]">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
