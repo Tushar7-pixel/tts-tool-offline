@@ -15,6 +15,13 @@ interface AppearanceMenuProps {
   onFontChange: (fontId: ReaderFontId) => void;
 }
 
+const THEME_OPTIONS: { id: ReaderTheme; label: string; desc: string }[] = [
+  { id: "eink-light", label: "E-Paper", desc: "Monochrome" },
+  { id: "sepia", label: "Sepia", desc: "Warm Book" },
+  { id: "eink-dark", label: "E-Ink Dark", desc: "Carbon" },
+  { id: "dark", label: "Slate", desc: "Emerald" },
+];
+
 export const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
   open,
   onOpenChange,
@@ -52,40 +59,38 @@ export const AppearanceMenu: React.FC<AppearanceMenuProps> = ({
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-56 p-3 z-50 rounded shadow-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--app-text)] flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-100"
+          className="absolute right-0 top-full mt-2 w-64 p-3 z-50 rounded shadow-2xl border border-[var(--panel-border)] bg-[var(--panel-bg)] text-[var(--app-text)] flex flex-col gap-3.5 animate-in fade-in zoom-in-95 duration-100"
           style={{
             backgroundColor: "var(--panel-bg)",
             color: "var(--app-text)",
           }}
         >
-          {/* Theme Section */}
+          {/* 4 Themes Selection Grid */}
           <div>
             <span className="text-[10px] font-bold uppercase tracking-wider block opacity-70 mb-1.5 font-mono">
-              Theme
+              Reading Theme
             </span>
             <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => onThemeChange("dark")}
-                className={`text-xs py-1.5 px-2 rounded font-semibold border border-[var(--panel-border)] transition cursor-pointer ${
-                  theme === "dark"
-                    ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold"
-                    : "bg-[var(--control-bg)] hover:bg-black/10 dark:hover:bg-white/10"
-                }`}
-              >
-                Dark
-              </button>
-              <button
-                type="button"
-                onClick={() => onThemeChange("ereader")}
-                className={`text-xs py-1.5 px-2 rounded font-semibold border border-[var(--panel-border)] transition cursor-pointer ${
-                  theme === "ereader"
-                    ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold"
-                    : "bg-[var(--control-bg)] hover:bg-black/10 dark:hover:bg-white/10"
-                }`}
-              >
-                eReader
-              </button>
+              {THEME_OPTIONS.map((opt) => {
+                const isActive = theme === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => onThemeChange(opt.id)}
+                    className={`text-xs py-2 px-2.5 rounded text-left border transition cursor-pointer flex flex-col gap-0.5 ${
+                      isActive
+                        ? "bg-[var(--app-text)] text-[var(--app-bg)] font-bold border-transparent"
+                        : "bg-[var(--control-bg)] border-[var(--control-border)] hover:bg-black/5 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <span className="leading-tight">{opt.label}</span>
+                    <span className="text-[9px] opacity-70 font-normal">
+                      {opt.desc}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

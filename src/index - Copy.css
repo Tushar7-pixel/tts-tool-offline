@@ -1,0 +1,248 @@
+/* src/index.css */
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #111111;
+  --app-text: #f0f0f0;
+  --header-bg: #000000;
+  --header-border: #333333;
+  --panel-bg: #141414;
+  --panel-header: #000000;
+  --panel-border: #333333;
+  --control-bg: #1c1c1c;
+  --control-border: #444444;
+  --btn-bg: #1a1a1a;
+  --btn-border: #444444;
+  --btn-text: #ffffff;
+  --btn-hover: #2a2a2a;
+  --muted: #888888;
+  --accent: #ffffff;
+  --accent-soft: #222222;
+  --input-bg: #080808;
+  --row-selected-bg: #ffffff;
+  --row-selected-text: #000000;
+  --progress-track: #333333;
+  --progress-fill: #ffffff;
+  --play-bg: #ffffff;
+  --play-text: #000000;
+  --pause-bg: #000000;
+  --pause-text: #ffffff;
+  --pause-border: #ffffff;
+  --line-current-bg: #262626;
+  --line-current-text: #ffffff;
+  --line-queued-bg: #181818;
+  --line-queued-text: #cccccc;
+  --line-processed-bg: transparent;
+  --line-processed-text: #ffffff;
+  --line-pending-text: #777777;
+  --line-pending-hover: #222222;
+  --selection-bg: #ffffff;
+  --selection-text: #000000;
+  --voice-bg: #1c1c1c;
+  --voice-text: #ffffff;
+  --voice-border: #444444;
+  --menu-shadow: none;
+}
+
+/* Authentic Hardware E-Ink / E-Paper Mode */
+[data-theme="ereader"] {
+  color-scheme: light;
+  --app-bg: #e3e1da; /* Raw E-Paper display base */
+  --app-text: #0a0a0a; /* Pure dense carbon ink */
+  --header-bg: #000000; /* Inverted top e-paper bar */
+  --header-text: #ffffff; /* White pixel readout */
+  --header-border: #000000;
+  --panel-bg: #eae8e1; /* Paper card background */
+  --panel-header: #dedbd3; /* Sharp hairline header */
+  --panel-border: #141414; /* High-contrast 1px black divider */
+  --control-bg: #dedbd3;
+  --control-border: #141414;
+  --btn-bg: #dedbd3;
+  --btn-border: #141414;
+  --btn-text: #000000;
+  --btn-hover: #000000; /* Inverts on hover */
+  --btn-hover-text: #ffffff;
+  --muted: #4a4a4a;
+  --accent: #000000;
+  --accent-soft: #000000;
+  --input-bg: #ffffff;
+  --row-selected-bg: #000000; /* Selected row fully inverted */
+  --row-selected-text: #ffffff;
+  --progress-track: #cfccc2;
+  --progress-fill: #000000;
+
+  /* Monochromatic high-contrast disc */
+  --play-bg: #000000;
+  --play-text: #ffffff;
+  --pause-bg: #dedbd3;
+  --pause-text: #000000;
+  --pause-border: #000000;
+
+  --line-current-bg: #000000;
+  --line-current-text: #ffffff;
+  --line-queued-bg: #d7d4cc;
+  --line-queued-text: #000000;
+  --line-processed-bg: transparent;
+  --line-processed-text: #0a0a0a;
+  --line-pending-text: #444444;
+  --line-pending-hover: #d7d4cc;
+  --selection-bg: #000000;
+  --selection-text: #ffffff;
+  --voice-bg: #dedbd3;
+  --voice-text: #000000;
+  --voice-border: #141414;
+  --menu-shadow: none; /* E-ink doesn't cast soft shadows */
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--app-bg);
+  color: var(--app-text);
+  font-family:
+    "Inter",
+    -apple-system,
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: subpixel-antialiased;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  text-align: left;
+}
+
+.app-shell {
+  background: var(--app-bg);
+  color: var(--app-text);
+}
+
+.app-shell ::selection {
+  background: var(--selection-bg);
+  color: var(--selection-text);
+}
+
+/* Inverted Top Status Bar like hardware e-readers */
+[data-theme="ereader"] .app-header {
+  background: #000000;
+  color: #ffffff;
+  border-bottom: 2px solid #000000;
+}
+[data-theme="ereader"] .app-header .app-control,
+[data-theme="ereader"] .app-header .app-btn {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #555555;
+}
+[data-theme="ereader"] .app-header .app-muted {
+  color: #aaaaaa;
+}
+[data-theme="ereader"] .app-header input {
+  background: #111111;
+  color: #ffffff;
+  border-color: #555555;
+}
+
+/* Crisp Sharp Panels */
+.app-panel {
+  background: var(--panel-bg);
+  border: 1.5px solid var(--panel-border);
+  box-shadow: none !important;
+  border-radius: 4px;
+}
+
+.app-panel-header {
+  background: var(--panel-header);
+  border-bottom: 1.5px solid var(--panel-border);
+  color: var(--app-text);
+  font-family: "Space Mono", monospace;
+  font-weight: 700;
+}
+
+.app-control {
+  background: var(--control-bg);
+  border: 1.5px solid var(--control-border);
+  border-radius: 3px;
+}
+
+.app-btn {
+  background: var(--btn-bg);
+  border: 1.5px solid var(--btn-border);
+  color: var(--btn-text);
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+[data-theme="ereader"] .app-btn:hover:not(:disabled) {
+  background: #000000;
+  color: #ffffff;
+}
+
+.app-btn:disabled {
+  opacity: 0.25;
+}
+
+.app-play {
+  background: var(--play-bg);
+  color: var(--play-text);
+  border: 2px solid var(--panel-border);
+}
+
+.app-pause {
+  background: var(--pause-bg);
+  color: var(--pause-text);
+  border: 2px solid var(--pause-border);
+}
+
+.app-input {
+  background: var(--input-bg);
+  border: 1.5px solid var(--control-border);
+  color: var(--app-text);
+  border-radius: 3px;
+}
+
+.app-input:focus {
+  outline: none;
+  border-color: var(--app-text);
+}
+
+/* Sharp hairline row dividers on BookShelf */
+.shelf-row {
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--app-text);
+}
+
+.shelf-row.is-selected {
+  background: var(--row-selected-bg) !important;
+  color: var(--row-selected-text) !important;
+}
+
+.shelf-row.is-selected .shelf-title,
+.shelf-row.is-selected .app-muted {
+  color: var(--row-selected-text) !important;
+}
+
+.shelf-progress {
+  background: var(--progress-track);
+  border: 1px solid var(--panel-border);
+}
+
+.shelf-progress-fill {
+  background: var(--progress-fill);
+}
+
+/* E-Ink Audio Active sentence highlight: high-contrast inverted block */
+.reader-line.is-current {
+  background: var(--line-current-bg);
+  color: var(--line-current-text);
+  font-weight: 500;
+  border-radius: 2px;
+}

@@ -6,85 +6,132 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   1. DARK THEME (Original: Slate & Emerald)
+   ========================================================= */
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --app-bg: #111111;
-  --app-text: #f0f0f0;
-  --header-bg: #000000;
-  --header-border: #333333;
-  --panel-bg: #141414;
-  --panel-header: #000000;
-  --panel-border: #333333;
-  --control-bg: #1c1c1c;
-  --control-border: #444444;
-  --btn-bg: #1a1a1a;
-  --btn-border: #444444;
-  --btn-text: #ffffff;
-  --btn-hover: #2a2a2a;
-  --muted: #888888;
-  --accent: #ffffff;
-  --accent-soft: #222222;
-  --input-bg: #080808;
-  --row-selected-bg: #ffffff;
-  --row-selected-text: #000000;
-  --progress-track: #333333;
-  --progress-fill: #ffffff;
-  --play-bg: #ffffff;
-  --play-text: #000000;
-  --pause-bg: #000000;
-  --pause-text: #ffffff;
-  --pause-border: #ffffff;
-  --line-current-bg: #262626;
-  --line-current-text: #ffffff;
-  --line-queued-bg: #181818;
-  --line-queued-text: #cccccc;
+  --app-bg: #0e0f12;
+  --app-text: #d4d4d8;
+  --header-bg: #15171c;
+  --header-border: #2a2d35;
+  --panel-bg: #13151a;
+  --panel-header: #181a20;
+  --panel-border: #2b2e38;
+  --control-bg: #1b1e24;
+  --control-border: #2e323e;
+  --btn-bg: #242731;
+  --btn-border: #3c4150;
+  --btn-text: #f4f4f5;
+  --btn-hover: #2e323e;
+  --muted: #a1a1aa;
+  --accent: #34d399;
+  --accent-soft: #10261b;
+  --input-bg: #121316;
+  --row-selected-bg: #12241b;
+  --row-selected-text: #6ee7b7;
+  --progress-track: #20232c;
+  --progress-fill: #10b981;
+  --play-bg: #059669;
+  --play-text: #ffffff;
+  --pause-bg: rgba(245, 158, 11, 0.2);
+  --pause-text: #fcd34d;
+  --pause-border: rgba(245, 158, 11, 0.4);
+  --line-current-bg: #10261b;
+  --line-current-text: #a7f3d0;
+  --line-queued-bg: #101826;
+  --line-queued-text: #bae6fd;
   --line-processed-bg: transparent;
-  --line-processed-text: #ffffff;
-  --line-pending-text: #777777;
-  --line-pending-hover: #222222;
-  --selection-bg: #ffffff;
-  --selection-text: #000000;
-  --voice-bg: #1c1c1c;
-  --voice-text: #ffffff;
-  --voice-border: #444444;
-  --menu-shadow: none;
+  --line-processed-text: #d4d4d8;
+  --line-pending-text: #71717a;
+  --line-pending-hover: #181a22;
+  --selection-bg: #022c22;
+  --selection-text: #6ee7b7;
+  --voice-bg: #10261b;
+  --voice-text: #34d399;
+  --voice-border: #1b4e33;
+  --menu-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
 }
 
-/* Authentic Hardware E-Ink / E-Paper Mode */
-[data-theme="ereader"] {
+/* =========================================================
+   2. SEPIA THEME (Original: Warm Paper & Amber)
+   ========================================================= */
+[data-theme="sepia"] {
   color-scheme: light;
-  --app-bg: #e3e1da; /* Raw E-Paper display base */
-  --app-text: #0a0a0a; /* Pure dense carbon ink */
-  --header-bg: #000000; /* Inverted top e-paper bar */
-  --header-text: #ffffff; /* White pixel readout */
+  --app-bg: #f4f1ea;
+  --app-text: #2c302e;
+  --header-bg: #f7f5f0;
+  --header-border: #e2ded6;
+  --panel-bg: #f7f5f0;
+  --panel-header: #f0ece4;
+  --panel-border: #e2ded6;
+  --control-bg: #efebe3;
+  --control-border: #e2ded6;
+  --btn-bg: #efebe3;
+  --btn-border: #d7d2c8;
+  --btn-text: #2c302e;
+  --btn-hover: #e7e2d8;
+  --muted: #5c5f5b;
+  --accent: #3d4a3f;
+  --accent-soft: #ece6d8;
+  --input-bg: #fbfaf6;
+  --row-selected-bg: #ece6d8;
+  --row-selected-text: #2c302e;
+  --progress-track: #e2ded6;
+  --progress-fill: #6b746c;
+  --play-bg: #ffb900;
+  --play-text: #000000;
+  --pause-bg: #ece6d8;
+  --pause-text: #2c302e;
+  --pause-border: #504328;
+  --line-current-bg: rgba(245, 218, 129, 0.45);
+  --line-current-text: #1a1a1a;
+  --line-queued-bg: rgba(246, 231, 183, 0.13);
+  --line-queued-text: #1a1a1a;
+  --line-processed-bg: rgba(183, 225, 240, 0.14);
+  --line-processed-text: #2c3e50;
+  --line-pending-text: #222222;
+  --line-pending-hover: #efebe3;
+  --selection-bg: #f5da81;
+  --selection-text: #1a1a1a;
+  --voice-bg: #efebe3;
+  --voice-text: #3d4a3f;
+  --voice-border: #d7d2c8;
+  --menu-shadow: 0 12px 28px rgba(80, 70, 50, 0.12);
+}
+
+/* =========================================================
+   3. E-INK LIGHT THEME (Authentic Paper White / Dense Ink)
+   ========================================================= */
+[data-theme="eink-light"] {
+  color-scheme: light;
+  --app-bg: #e3e1da;
+  --app-text: #0a0a0a;
+  --header-bg: #000000;
   --header-border: #000000;
-  --panel-bg: #eae8e1; /* Paper card background */
-  --panel-header: #dedbd3; /* Sharp hairline header */
-  --panel-border: #141414; /* High-contrast 1px black divider */
+  --panel-bg: #eae8e1;
+  --panel-header: #dedbd3;
+  --panel-border: #141414;
   --control-bg: #dedbd3;
   --control-border: #141414;
   --btn-bg: #dedbd3;
   --btn-border: #141414;
   --btn-text: #000000;
-  --btn-hover: #000000; /* Inverts on hover */
-  --btn-hover-text: #ffffff;
+  --btn-hover: #000000;
   --muted: #4a4a4a;
   --accent: #000000;
   --accent-soft: #000000;
   --input-bg: #ffffff;
-  --row-selected-bg: #000000; /* Selected row fully inverted */
+  --row-selected-bg: #000000;
   --row-selected-text: #ffffff;
   --progress-track: #cfccc2;
   --progress-fill: #000000;
-
-  /* Monochromatic high-contrast disc */
   --play-bg: #000000;
   --play-text: #ffffff;
   --pause-bg: #dedbd3;
   --pause-text: #000000;
   --pause-border: #000000;
-
   --line-current-bg: #000000;
   --line-current-text: #ffffff;
   --line-queued-bg: #d7d4cc;
@@ -98,9 +145,59 @@
   --voice-bg: #dedbd3;
   --voice-text: #000000;
   --voice-border: #141414;
-  --menu-shadow: none; /* E-ink doesn't cast soft shadows */
+  --menu-shadow: none;
 }
 
+/* =========================================================
+   4. E-INK DARK THEME (Crisp Inverted Carbon Display)
+   ========================================================= */
+[data-theme="eink-dark"] {
+  color-scheme: dark;
+  --app-bg: #121212;
+  --app-text: #eeeeee;
+  --header-bg: #000000;
+  --header-border: #222222;
+  --panel-bg: #181818;
+  --panel-header: #000000;
+  --panel-border: #333333;
+  --control-bg: #1e1e1e;
+  --control-border: #3a3a3a;
+  --btn-bg: #1e1e1e;
+  --btn-border: #3a3a3a;
+  --btn-text: #ffffff;
+  --btn-hover: #2e2e2e;
+  --muted: #888888;
+  --accent: #ffffff;
+  --accent-soft: #222222;
+  --input-bg: #0a0a0a;
+  --row-selected-bg: #ffffff;
+  --row-selected-text: #000000;
+  --progress-track: #2a2a2a;
+  --progress-fill: #ffffff;
+  --play-bg: #ffffff;
+  --play-text: #000000;
+  --pause-bg: #000000;
+  --pause-text: #ffffff;
+  --pause-border: #ffffff;
+  --line-current-bg: #2a2a2a;
+  --line-current-text: #ffffff;
+  --line-queued-bg: #1e1e1e;
+  --line-queued-text: #cccccc;
+  --line-processed-bg: transparent;
+  --line-processed-text: #ffffff;
+  --line-pending-text: #777777;
+  --line-pending-hover: #222222;
+  --selection-bg: #ffffff;
+  --selection-text: #000000;
+  --voice-bg: #1e1e1e;
+  --voice-text: #ffffff;
+  --voice-border: #3a3a3a;
+  --menu-shadow: none;
+}
+
+/* =========================================================
+   Base Layout & Typography
+   ========================================================= */
 body {
   margin: 0;
   padding: 0;
@@ -111,7 +208,10 @@ body {
     -apple-system,
     system-ui,
     sans-serif;
-  -webkit-font-smoothing: subpixel-antialiased;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
 }
 
 #root {
@@ -130,32 +230,36 @@ body {
   color: var(--selection-text);
 }
 
-/* Inverted Top Status Bar like hardware e-readers */
-[data-theme="ereader"] .app-header {
+.app-header {
+  background: var(--header-bg);
+  border-bottom: 1.5px solid var(--header-border);
+}
+
+/* E-Ink Light Specific Inverted Header Bar */
+[data-theme="eink-light"] .app-header {
   background: #000000;
   color: #ffffff;
   border-bottom: 2px solid #000000;
 }
-[data-theme="ereader"] .app-header .app-control,
-[data-theme="ereader"] .app-header .app-btn {
+[data-theme="eink-light"] .app-header .app-control,
+[data-theme="eink-light"] .app-header .app-btn {
   background: #000000;
   color: #ffffff;
-  border: 1px solid #555555;
+  border: 1px solid #444444;
 }
-[data-theme="ereader"] .app-header .app-muted {
+[data-theme="eink-light"] .app-header .app-muted {
   color: #aaaaaa;
 }
-[data-theme="ereader"] .app-header input {
+[data-theme="eink-light"] .app-header input {
   background: #111111;
   color: #ffffff;
-  border-color: #555555;
+  border-color: #444444;
 }
 
-/* Crisp Sharp Panels */
+/* Panels */
 .app-panel {
   background: var(--panel-bg);
   border: 1.5px solid var(--panel-border);
-  box-shadow: none !important;
   border-radius: 4px;
 }
 
@@ -179,9 +283,13 @@ body {
   color: var(--btn-text);
   border-radius: 3px;
   font-weight: 600;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
 }
 
-[data-theme="ereader"] .app-btn:hover:not(:disabled) {
+[data-theme="eink-light"] .app-btn:hover:not(:disabled) {
   background: #000000;
   color: #ffffff;
 }
@@ -193,13 +301,21 @@ body {
 .app-play {
   background: var(--play-bg);
   color: var(--play-text);
-  border: 2px solid var(--panel-border);
+  border: 1.5px solid var(--panel-border);
 }
 
 .app-pause {
   background: var(--pause-bg);
   color: var(--pause-text);
-  border: 2px solid var(--pause-border);
+  border: 1.5px solid var(--pause-border);
+}
+
+.app-muted {
+  color: var(--muted);
+}
+
+.app-accent {
+  color: var(--accent);
 }
 
 .app-input {
@@ -214,7 +330,17 @@ body {
   border-color: var(--app-text);
 }
 
-/* Sharp hairline row dividers on BookShelf */
+/* Menus & Popovers */
+.app-menu,
+[data-theme="eink-light"] .app-menu,
+[data-theme="eink-dark"] .app-menu {
+  background-color: var(--panel-bg) !important;
+  color: var(--app-text) !important;
+  border: 1.5px solid var(--panel-border) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Shelf Styling */
 .shelf-row {
   border-bottom: 1px solid var(--panel-border);
   color: var(--app-text);
@@ -239,10 +365,34 @@ body {
   background: var(--progress-fill);
 }
 
-/* E-Ink Audio Active sentence highlight: high-contrast inverted block */
+/* Reader Line States */
+.reader-line {
+  border-radius: 2px;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
 .reader-line.is-current {
   background: var(--line-current-bg);
   color: var(--line-current-text);
   font-weight: 500;
-  border-radius: 2px;
+}
+
+.reader-line.is-queued {
+  background: var(--line-queued-bg);
+  color: var(--line-queued-text);
+}
+
+.reader-line.is-processed {
+  background: var(--line-processed-bg);
+  color: var(--line-processed-text);
+}
+
+.reader-line.is-pending {
+  color: var(--line-pending-text);
+}
+
+.reader-line.is-pending:hover {
+  background: var(--line-pending-hover);
 }

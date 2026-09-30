@@ -1,6 +1,6 @@
 // src/utils/readerAppearance.ts
 
-export type ReaderTheme = "dark" | "ereader";
+export type ReaderTheme = "dark" | "sepia" | "eink-light" | "eink-dark";
 
 export type ReaderFontId =
   | "hand"
@@ -29,6 +29,13 @@ export const READER_FONTS: ReaderFontOption[] = [
     cssFamily: '"Patrick Hand", "Comic Sans MS", cursive',
     googleHref:
       "https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap",
+  },
+  {
+    id: "caveat",
+    label: "Playful Script",
+    cssFamily: '"Caveat", cursive',
+    googleHref:
+      "https://fonts.googleapis.com/css2?family=Caveat:wght@400..700&display=swap",
   },
   {
     id: "serif",
@@ -77,10 +84,13 @@ export const READER_FONTS: ReaderFontOption[] = [
 export function loadReaderTheme(): ReaderTheme {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    return stored === "dark" ? "dark" : "ereader";
-  } catch {
-    return "ereader";
-  }
+    if (stored === "dark" || stored === "sepia" || stored === "eink-light" || stored === "eink-dark") {
+      return stored;
+    }
+    // Backward compatibility with legacy "ereader" key
+    if (stored === "ereader") return "eink-light";
+  } catch { }
+  return "eink-light";
 }
 
 export function loadReaderFontId(): ReaderFontId {
@@ -89,26 +99,20 @@ export function loadReaderFontId(): ReaderFontId {
     if (READER_FONTS.some((font) => font.id === stored)) {
       return stored as ReaderFontId;
     }
-  } catch {
-    /* ignore */
-  }
+  } catch { }
   return "hand";
 }
 
 export function saveReaderTheme(theme: ReaderTheme) {
   try {
     localStorage.setItem(THEME_KEY, theme);
-  } catch {
-    /* ignore */
-  }
+  } catch { }
 }
 
 export function saveReaderFontId(fontId: ReaderFontId) {
   try {
     localStorage.setItem(FONT_KEY, fontId);
-  } catch {
-    /* ignore */
-  }
+  } catch { }
 }
 
 export function getReaderFont(fontId: ReaderFontId): ReaderFontOption {
