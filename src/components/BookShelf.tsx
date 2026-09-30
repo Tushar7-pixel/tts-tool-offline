@@ -5,6 +5,7 @@ import { exportLibrary, importLibrary } from "../utils/db";
 import { FindBookModal } from "./FindBookModal";
 import { ExploreBooksModal } from "./ExploreBooksModal";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
+import type { ReaderTheme } from "../utils/readerAppearance";
 
 interface BookShelfProps {
   books: BookDoc[];
@@ -14,7 +15,7 @@ interface BookShelfProps {
   onDeleteBook: (id: string) => void;
   onAddBook: (file: File) => void;
   pageSize?: number;
-  theme: "dark" | "ereader";
+  theme: ReaderTheme;
 }
 
 export function cleanBookTitle(rawTitle: string): string {
