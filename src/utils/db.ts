@@ -60,12 +60,26 @@ const getDB = () =>
             }
         },
     });
+// src/utils/db.ts
 
 export async function saveBook(book: BookDoc): Promise<void> {
     const db = await getDB();
-    await db.put(STORE_NAME, book);
+    try {
+        await db.put(STORE_NAME, book);
+    } catch (err: any) {
+        console.warn("[DB] Full save exceeded WebKit record quota, trimming:", err);
+        // If Safari runs out of memory, strip displayPages duplication to cut record size by ~50%
+        const streamlinedBook: BookDoc = {
+            ...book,
+            displayPages: book.displayPages ? book.displayPages.map(page => page.slice(0, 80)) : undefined,
+        };
+        try {
+            await db.put(STORE_NAME, streamlinedBook);
+        } catch (innerErr) {
+            console.error("[DB] Failed to persist book even after trimming:", innerErr);
+        }
+    }
 }
-
 export async function getAllBooks(): Promise<BookDoc[]> {
     const db = await getDB();
     return db.getAll(STORE_NAME);

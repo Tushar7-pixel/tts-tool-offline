@@ -240,8 +240,9 @@ export function mapDisplayToSentences(
 
 export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   const buffer = await file.arrayBuffer();
-  // Pass Uint8Array to satisfy WebKit PDFJS binary loader
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  // 1. Keep a reference to the loading task
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+  const pdf = await loadingTask.promise;
 
   let coverUrl: string | undefined;
   try {
@@ -270,6 +271,11 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
           width: item.width,
           height: item.height,
         });
+      }
+
+      // Cleanup page-level resources
+      if (typeof page.cleanup === "function") {
+        page.cleanup();
       }
 
       const displayLines = groupVisualLines(items);
@@ -302,12 +308,12 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
     leadingEmptyCount++;
   }
 
-  // If the whole book is empty, keep at least one page; otherwise trim leading empty pages
   const trimOffset = leadingEmptyCount < rawPages.length ? leadingEmptyCount : 0;
   const pages = rawPages.slice(trimOffset);
   const displayPages = rawDisplayPages.slice(trimOffset);
 
-  // 2. Extract chapters and adjust chapter pageIndex offsets by trimOffset
+  // 2. Extract chapters and adjust offsets
+  // eslint-disable-next-line no-useless-assignment
   let rawChapters: ChapterItem[] = [];
   try {
     rawChapters = await extractPdfChapters(pdf, rawDisplayPages);
@@ -322,6 +328,16 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
       pageIndex: Math.max(0, ch.pageIndex - trimOffset),
     }))
     .filter((ch) => ch.pageIndex < pages.length);
+
+  // 3. Properly cleanup PDFDocumentProxy and destroy the loading task
+  try {
+    if (typeof pdf.cleanup === "function") {
+      pdf.cleanup();
+    }
+    await loadingTask.destroy();
+  } catch (err) {
+    console.warn("[PDF] Cleanup warning:", err);
+  }
 
   return { pages, displayPages, coverUrl, chapters };
 }
