@@ -31,7 +31,8 @@ function isTextItem(
     item !== null &&
     "str" in item &&
     typeof (item as { str: unknown }).str === "string" &&
-    "transform" in item
+    "transform" in item &&
+    Array.isArray((item as { transform: unknown }).transform)
   );
 }
 
@@ -100,10 +101,7 @@ function groupVisualLines(items: PdfTextItem[]): string[] {
   return lines;
 }
 
-// src/utils/pdf.ts
-
 export function splitSentences(rawText: string): string[] {
-  // Normalize spacing and fix spaced ellipses (e.g., ". . .")
   const cleaned = rawText
     .replace(/(?:\.\s*){2,}\./g, "...")
     .replace(/\s+/g, " ")
@@ -113,31 +111,42 @@ export function splitSentences(rawText: string): string[] {
 
   let rawSegments: string[] = [];
 
-  // 1. Extract raw sentences natively
-  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
-    const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
-    rawSegments = Array.from(segmenter.segment(cleaned))
-      .map((s) => s.segment.trim())
-      .filter((s) => s.length > 0);
-  } else {
+  // WebKit-safe sentence splitting: use standard regex first or safely iterate Segmenter
+  try {
+    if (typeof Intl !== "undefined" && typeof (Intl as any).Segmenter === "function") {
+      const segmenter = new (Intl as any).Segmenter("en", { granularity: "sentence" });
+      const segmentsIterable = segmenter.segment(cleaned);
+      // Safe iteration without Array.from which fails on older iPadOS WebKit Symbol.iterator
+      for (const item of segmentsIterable) {
+        if (item && item.segment) {
+          const trimmed = item.segment.trim();
+          if (trimmed.length > 0) rawSegments.push(trimmed);
+        }
+      }
+    } else {
+      throw new Error("No Segmenter");
+    }
+  } catch {
+    // Regex fallback that runs on all WebKit / Safari browsers
     rawSegments = cleaned
-      .split(/(?<=(?<!\.)[.?!][\u201D\u2019"'’”\)\]]*)\s+(?=[A-Z"'\u201C\u2018])/)
+      .split(/(?<=[.?!]["'”’\)]*)\s+(?=[A-Z"'\u201C\u2018])/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
+  }
+
+  if (rawSegments.length === 0) {
+    rawSegments = [cleaned];
   }
 
   const finalChunks: string[] = [];
   let currentChunk = "";
 
-  // Helper to detect if a boundary represents a change in speaker/paragraph
   const isSpeakerBoundary = (a: string, b: string) => {
-    // True if chunk A ends with punctuation/quote AND chunk B starts with a quote
-    const aEndsWithPunctOrQuote = /[.?!"'”’]$/.test(a.trim());
-    const bStartsWithQuote = /^["'“‘]/.test(b.trim());
-    return aEndsWithPunctOrQuote && bStartsWithQuote;
+    const aEnds = /[.?!"'”’]$/.test(a.trim());
+    const bStarts = /^["'“‘]/.test(b.trim());
+    return aEnds && bStarts;
   };
 
-  // 2. Smart Merging Pass
   for (const seg of rawSegments) {
     if (!currentChunk) {
       currentChunk = seg;
@@ -146,16 +155,12 @@ export function splitSentences(rawText: string): string[] {
 
     const boundary = isSpeakerBoundary(currentChunk, seg);
 
-    // If it's a hard dialogue switch, NEVER merge them 
     if (boundary) {
       finalChunks.push(currentChunk);
       currentChunk = seg;
       continue;
     }
 
-    // Merge if:
-    // 1. The combined chunk is short enough for comfortable reading (~120 chars)
-    // 2. OR the new segment is a micro-sentence so it doesn't get orphaned
     if (currentChunk.length + seg.length < 120 || seg.length < 15) {
       currentChunk += " " + seg;
     } else {
@@ -252,10 +257,14 @@ export function mapDisplayToSentences(
 
 export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
 
-  // 1. Generate page 1 thumbnail using the loaded `pdf` document proxy
-  const coverUrl = await generatePdfThumbnail(pdf);
+  let coverUrl: string | undefined;
+  try {
+    coverUrl = await generatePdfThumbnail(pdf);
+  } catch (e) {
+    console.warn("Cover generation skipped:", e);
+  }
 
   const pages: string[][] = [];
   const displayPages: string[][] = [];
@@ -265,7 +274,8 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
     const content = await page.getTextContent();
     const items: PdfTextItem[] = [];
 
-    for (const item of content.items) {
+    const contentItems = Array.isArray(content?.items) ? content.items : [];
+    for (const item of contentItems) {
       if (!isTextItem(item)) continue;
       items.push({
         str: item.str,
@@ -292,7 +302,6 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   }
   const chapters = await extractPdfChapters(pdf, displayPages);
 
-  // 2. Return the generated coverUrl alongside the parsed text pages
   return { pages, displayPages, coverUrl, chapters };
 }
 
@@ -300,36 +309,31 @@ export async function generatePdfThumbnail(pdf: pdfjsLib.PDFDocumentProxy): Prom
   try {
     const page = await pdf.getPage(1);
     const unscaledViewport = page.getViewport({ scale: 1 });
-    
-    // Scale target: width of 120px for crisp, lightweight cover
     const scale = 120 / unscaledViewport.width;
     const viewport = page.getViewport({ scale });
 
-    const canvas = document.createElement('canvas');
+    const canvas = document.createElement("canvas");
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return undefined;
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Pass both canvas and canvasContext to satisfy RenderParameters
     const renderTask = page.render({
-      canvas: canvas,
       canvasContext: ctx,
       viewport: viewport,
-    });
+    } as any);
 
     await renderTask.promise;
-    return canvas.toDataURL('image/jpeg', 0.82);
+    return canvas.toDataURL("image/jpeg", 0.82);
   } catch (err) {
-    console.error('PDF Cover thumbnail generation error:', err);
+    console.warn("PDF Cover thumbnail generation skipped:", err);
     return undefined;
   }
 }
-
 
 export type ChapterItem = {
   title: string;
@@ -340,22 +344,17 @@ const NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|tw
 
 const NOVEL_CHAPTER_REGEX = new RegExp(
   `^(?:` +
-    // 1. Explicit Chapter/Part + Number/Word (e.g., "Chapter 1", "Part Two")
-    `(?:chapter|part|act|book)\\s+(?:\\d+|[ivxlcdm]+|(?:(?:${NUMBER_WORDS})[\\s-]?)+)` +
-    // 2. Structural framing
-    `|prologue|epilogue|interlude|prelude|afterword` +
-    // 3. Temporal jumps
-    `|(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\\d+)\\s+(?:years?|months?|weeks?|days?|hours?)\\s+later)` +
-    // 4. Strict standalone Roman numerals (requires exact bounds)
-    `|\\b(?:I|V|X|L|C|D|M)+\\b\\.?` +
+  `(?:chapter|part|act|book)\\s+(?:\\d+|[ivxlcdm]+|(?:(?:${NUMBER_WORDS})[\\s-]?)+)` +
+  `|prologue|epilogue|interlude|prelude|afterword` +
+  `|(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\\d+)\\s+(?:years?|months?|weeks?|days?|hours?)\\s+later)` +
+  `|\\b(?:I|V|X|L|C|D|M)+\\b\\.?` +
   `)$`,
   "i"
 );
 
-// Analyzes the whole document to find headers that repeat on almost every page
 function detectRunningHeaders(displayPages: string[][]): Set<string> {
   const headerCounts = new Map<string, number>();
-  
+
   for (const lines of displayPages) {
     if (!lines || lines.length === 0) continue;
     const nonEmpty = lines.map(l => l.trim()).filter(l => l.length > 0);
@@ -367,7 +366,6 @@ function detectRunningHeaders(displayPages: string[][]): Set<string> {
 
   const runningHeaders = new Set<string>();
   for (const [header, count] of headerCounts.entries()) {
-    // If a string appears at the very top of more than 4 pages, it's a running header, not a chapter start
     if (count > 4) runningHeaders.add(header);
   }
   return runningHeaders;
@@ -382,9 +380,8 @@ export function parseChaptersFromDisplayPages(displayPages: string[][]): Chapter
     if (!lines || lines.length === 0) continue;
 
     const nonEmpty = lines.map((l) => l.trim()).filter((l) => l.length > 0);
-    if (nonEmpty.length < 3) continue; // Skip blank/filler pages
+    if (nonEmpty.length < 3) continue;
 
-    // Inspect only the top 3 lines of the page
     const searchSlice = nonEmpty.slice(0, 3);
 
     for (let i = 0; i < searchSlice.length; i++) {
@@ -394,19 +391,14 @@ export function parseChaptersFromDisplayPages(displayPages: string[][]): Chapter
       if (runningHeaders.has(normalizedLine)) continue;
 
       const isDirectMatch = NOVEL_CHAPTER_REGEX.test(line);
-
-      // POV / Character Name Detection (e.g., "RHETT", "SUMMER")
-      // Criteria: Top 2 lines, short length, all uppercase or single title-case word, no trailing punctuation
-      const isPovOrMinimalist = 
-        i <= 1 && 
-        line.length <= 25 && 
-        /^(?:[A-Z0-9\s/:-]+|[A-Z][a-z]+)$/.test(line) && 
+      const isPovOrMinimalist =
+        i <= 1 &&
+        line.length <= 25 &&
+        /^(?:[A-Z0-9\s/:-]+|[A-Z][a-z]+)$/.test(line) &&
         !/[.,;!?]$/.test(line);
 
       if (isDirectMatch || isPovOrMinimalist) {
         let fullTitle = line;
-
-        // Merge with subtitle if the next line is a short character name or title
         const nextLine = searchSlice[i + 1];
         if (
           nextLine &&
@@ -424,7 +416,7 @@ export function parseChaptersFromDisplayPages(displayPages: string[][]): Chapter
             pageIndex: pIdx,
           });
         }
-        break; 
+        break;
       }
     }
   }
@@ -453,9 +445,7 @@ export async function extractPdfChapters(
               });
             }
           }
-        } catch {
-          // Skip invalid destination reference
-        }
+        } catch { }
       }
       if (outlineChapters.length > 1) {
         return outlineChapters.sort((a, b) => a.pageIndex - b.pageIndex);
