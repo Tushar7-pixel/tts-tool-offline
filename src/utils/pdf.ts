@@ -37,11 +37,13 @@ function isTextItem(
 }
 
 function joinLineItems(items: PdfTextItem[]): string {
+  if (!Array.isArray(items) || items.length === 0) return "";
   const sorted = [...items].sort((a, b) => a.x - b.x);
   let out = "";
   let prevEnd: number | null = null;
 
-  for (const item of sorted) {
+  for (let i = 0; i < sorted.length; i++) {
+    const item = sorted[i];
     if (prevEnd !== null) {
       const gap = item.x - prevEnd;
       const needsSpace = gap > Math.max(item.height * 0.15, 1.2);
@@ -57,7 +59,7 @@ function joinLineItems(items: PdfTextItem[]): string {
 }
 
 function groupVisualLines(items: PdfTextItem[]): string[] {
-  if (items.length === 0) return [];
+  if (!Array.isArray(items) || items.length === 0) return [];
 
   const sorted = [...items].sort((a, b) => {
     const yDiff = b.y - a.y;
@@ -67,7 +69,8 @@ function groupVisualLines(items: PdfTextItem[]): string[] {
   });
 
   const clusters: PdfTextItem[][] = [];
-  for (const item of sorted) {
+  for (let i = 0; i < sorted.length; i++) {
+    const item = sorted[i];
     const last = clusters[clusters.length - 1];
     if (!last) {
       clusters.push([item]);
@@ -101,7 +104,10 @@ function groupVisualLines(items: PdfTextItem[]): string[] {
   return lines;
 }
 
+// Sentence splitter that NEVER uses Intl.Segmenter iteration (avoids WebKit Symbol.iterator bug)
 export function splitSentences(rawText: string): string[] {
+  if (!rawText || typeof rawText !== "string") return [];
+
   const cleaned = rawText
     .replace(/(?:\.\s*){2,}\./g, "...")
     .replace(/\s+/g, " ")
@@ -109,34 +115,13 @@ export function splitSentences(rawText: string): string[] {
 
   if (!cleaned) return [];
 
-  let rawSegments: string[] = [];
+  // Robust, cross-browser sentence split that runs on all versions of Safari/WebKit
+  const rawSegments = cleaned
+    .split(/(?<=[.?!]["'”’\)]*)\s+(?=[A-Z"'\u201C\u2018])/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 
-  // WebKit-safe sentence splitting: use standard regex first or safely iterate Segmenter
-  try {
-    if (typeof Intl !== "undefined" && typeof (Intl as any).Segmenter === "function") {
-      const segmenter = new (Intl as any).Segmenter("en", { granularity: "sentence" });
-      const segmentsIterable = segmenter.segment(cleaned);
-      // Safe iteration without Array.from which fails on older iPadOS WebKit Symbol.iterator
-      for (const item of segmentsIterable) {
-        if (item && item.segment) {
-          const trimmed = item.segment.trim();
-          if (trimmed.length > 0) rawSegments.push(trimmed);
-        }
-      }
-    } else {
-      throw new Error("No Segmenter");
-    }
-  } catch {
-    // Regex fallback that runs on all WebKit / Safari browsers
-    rawSegments = cleaned
-      .split(/(?<=[.?!]["'”’\)]*)\s+(?=[A-Z"'\u201C\u2018])/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-  }
-
-  if (rawSegments.length === 0) {
-    rawSegments = [cleaned];
-  }
+  if (rawSegments.length === 0) return [cleaned];
 
   const finalChunks: string[] = [];
   let currentChunk = "";
@@ -147,7 +132,8 @@ export function splitSentences(rawText: string): string[] {
     return aEnds && bStarts;
   };
 
-  for (const seg of rawSegments) {
+  for (let i = 0; i < rawSegments.length; i++) {
+    const seg = rawSegments[i];
     if (!currentChunk) {
       currentChunk = seg;
       continue;
@@ -189,6 +175,10 @@ export function mapDisplayToSentences(
   displayLines: string[],
   sentences: string[],
 ): { displayToSentence: number[][]; sentenceToDisplay: number[][] } {
+  if (!Array.isArray(displayLines) || !Array.isArray(sentences)) {
+    return { displayToSentence: [], sentenceToDisplay: [] };
+  }
+
   const displayToSentence = displayLines.map(() => [] as number[]);
   const sentenceToDisplay = sentences.map(() => [] as number[]);
 
@@ -198,8 +188,9 @@ export function mapDisplayToSentences(
 
   const lineRanges: { start: number; end: number }[] = [];
   let cursor = 0;
-  for (const line of displayLines) {
-    const normalized = line.replace(/\s+/g, " ").trim();
+  for (let d = 0; d < displayLines.length; d++) {
+    const line = displayLines[d];
+    const normalized = (line || "").replace(/\s+/g, " ").trim();
     if (!normalized) {
       lineRanges.push({ start: -1, end: -1 });
       continue;
@@ -210,7 +201,7 @@ export function mapDisplayToSentences(
   }
 
   const rawText = displayLines
-    .map((line) => line.replace(/\s+/g, " ").trim())
+    .map((line) => (line || "").replace(/\s+/g, " ").trim())
     .filter((line) => line.length > 0)
     .join(" ");
 
@@ -226,10 +217,10 @@ export function mapDisplayToSentences(
 
   for (let d = 0; d < displayLines.length; d++) {
     const lineRange = lineRanges[d];
-    if (lineRange.start < 0) continue;
+    if (!lineRange || lineRange.start < 0) continue;
     for (let s = 0; s < sentences.length; s++) {
       const sentenceRange = sentenceRanges[s];
-      if (sentenceRange.start < 0) continue;
+      if (!sentenceRange || sentenceRange.start < 0) continue;
       if (
         rangesOverlap(
           lineRange.start,
@@ -244,19 +235,12 @@ export function mapDisplayToSentences(
     }
   }
 
-  const mappedSentences = sentenceToDisplay.filter((rows) => rows.length > 0);
-  if (mappedSentences.length === 0 && displayLines.length === sentences.length) {
-    for (let i = 0; i < sentences.length; i++) {
-      displayToSentence[i] = [i];
-      sentenceToDisplay[i] = [i];
-    }
-  }
-
   return { displayToSentence, sentenceToDisplay };
 }
 
 export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   const buffer = await file.arrayBuffer();
+  // Pass Uint8Array to satisfy WebKit PDFJS binary loader
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
 
   let coverUrl: string | undefined;
@@ -270,37 +254,51 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
   const displayPages: string[][] = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const items: PdfTextItem[] = [];
+    try {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const items: PdfTextItem[] = [];
 
-    const contentItems = Array.isArray(content?.items) ? content.items : [];
-    for (const item of contentItems) {
-      if (!isTextItem(item)) continue;
-      items.push({
-        str: item.str,
-        x: item.transform[4],
-        y: item.transform[5],
-        width: item.width,
-        height: item.height,
-      });
+      const rawItems = Array.isArray(content?.items) ? content.items : [];
+      for (let i = 0; i < rawItems.length; i++) {
+        const item = rawItems[i];
+        if (!isTextItem(item)) continue;
+        items.push({
+          str: item.str,
+          x: item.transform[4],
+          y: item.transform[5],
+          width: item.width,
+          height: item.height,
+        });
+      }
+
+      const displayLines = groupVisualLines(items);
+      const rawText = displayLines
+        .map((line) => line.replace(/\s+/g, " ").trim())
+        .filter((line) => line.length > 0)
+        .join(" ")
+        .replace(/\s+/g, " ");
+
+      const sentences = splitSentences(rawText);
+
+      displayPages.push(
+        displayLines.length > 0 ? displayLines : [EMPTY_PAGE],
+      );
+      pages.push(sentences.length > 0 ? sentences : [EMPTY_PAGE]);
+    } catch (pageErr) {
+      console.warn(`[PDF] Page ${pageNum} extraction fallback:`, pageErr);
+      displayPages.push([EMPTY_PAGE]);
+      pages.push([EMPTY_PAGE]);
     }
-
-    const displayLines = groupVisualLines(items);
-    const rawText = displayLines
-      .map((line) => line.replace(/\s+/g, " ").trim())
-      .filter((line) => line.length > 0)
-      .join(" ")
-      .replace(/\s+/g, " ");
-
-    const sentences = splitSentences(rawText);
-
-    displayPages.push(
-      displayLines.length > 0 ? displayLines : [EMPTY_PAGE],
-    );
-    pages.push(sentences.length > 0 ? sentences : [EMPTY_PAGE]);
   }
-  const chapters = await extractPdfChapters(pdf, displayPages);
+
+  let chapters: ChapterItem[] = [];
+  try {
+    chapters = await extractPdfChapters(pdf, displayPages);
+  } catch (chErr) {
+    console.warn("[PDF] Chapter extraction skipped:", chErr);
+    chapters = [];
+  }
 
   return { pages, displayPages, coverUrl, chapters };
 }
@@ -354,10 +352,12 @@ const NOVEL_CHAPTER_REGEX = new RegExp(
 
 function detectRunningHeaders(displayPages: string[][]): Set<string> {
   const headerCounts = new Map<string, number>();
+  if (!Array.isArray(displayPages)) return new Set();
 
-  for (const lines of displayPages) {
-    if (!lines || lines.length === 0) continue;
-    const nonEmpty = lines.map(l => l.trim()).filter(l => l.length > 0);
+  for (let p = 0; p < displayPages.length; p++) {
+    const lines = displayPages[p];
+    if (!Array.isArray(lines) || lines.length === 0) continue;
+    const nonEmpty = lines.map(l => (l || "").trim()).filter(l => l.length > 0);
     if (nonEmpty.length > 0) {
       const topStr = nonEmpty[0].toLowerCase();
       headerCounts.set(topStr, (headerCounts.get(topStr) || 0) + 1);
@@ -365,21 +365,23 @@ function detectRunningHeaders(displayPages: string[][]): Set<string> {
   }
 
   const runningHeaders = new Set<string>();
-  for (const [header, count] of headerCounts.entries()) {
+  headerCounts.forEach((count, header) => {
     if (count > 4) runningHeaders.add(header);
-  }
+  });
   return runningHeaders;
 }
 
 export function parseChaptersFromDisplayPages(displayPages: string[][]): ChapterItem[] {
   const chapters: ChapterItem[] = [];
+  if (!Array.isArray(displayPages)) return chapters;
+
   const runningHeaders = detectRunningHeaders(displayPages);
 
   for (let pIdx = 0; pIdx < displayPages.length; pIdx++) {
     const lines = displayPages[pIdx];
-    if (!lines || lines.length === 0) continue;
+    if (!Array.isArray(lines) || lines.length === 0) continue;
 
-    const nonEmpty = lines.map((l) => l.trim()).filter((l) => l.length > 0);
+    const nonEmpty = lines.map((l) => (l || "").trim()).filter((l) => l.length > 0);
     if (nonEmpty.length < 3) continue;
 
     const searchSlice = nonEmpty.slice(0, 3);
@@ -430,10 +432,11 @@ export async function extractPdfChapters(
 ): Promise<ChapterItem[]> {
   try {
     const outline = await pdf.getOutline();
-    if (outline && outline.length > 1) {
+    if (Array.isArray(outline) && outline.length > 1) {
       const outlineChapters: ChapterItem[] = [];
-      for (const item of outline) {
-        if (!item.dest) continue;
+      for (let i = 0; i < outline.length; i++) {
+        const item = outline[i];
+        if (!item || !item.dest) continue;
         try {
           const dest = typeof item.dest === "string" ? await pdf.getDestination(item.dest) : item.dest;
           if (Array.isArray(dest) && dest[0]) {
