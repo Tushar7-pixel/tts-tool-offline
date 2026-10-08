@@ -250,8 +250,8 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
     console.warn("Cover generation skipped:", e);
   }
 
-  const pages: string[][] = [];
-  const displayPages: string[][] = [];
+  const rawPages: string[][] = [];
+  const rawDisplayPages: string[][] = [];
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     try {
@@ -281,24 +281,47 @@ export async function extractPdfPages(file: File): Promise<ExtractedPdf> {
 
       const sentences = splitSentences(rawText);
 
-      displayPages.push(
+      rawDisplayPages.push(
         displayLines.length > 0 ? displayLines : [EMPTY_PAGE],
       );
-      pages.push(sentences.length > 0 ? sentences : [EMPTY_PAGE]);
+      rawPages.push(sentences.length > 0 ? sentences : [EMPTY_PAGE]);
     } catch (pageErr) {
       console.warn(`[PDF] Page ${pageNum} extraction fallback:`, pageErr);
-      displayPages.push([EMPTY_PAGE]);
-      pages.push([EMPTY_PAGE]);
+      rawDisplayPages.push([EMPTY_PAGE]);
+      rawPages.push([EMPTY_PAGE]);
     }
   }
 
-  let chapters: ChapterItem[] = [];
+  // 1. Calculate how many consecutive empty pages exist at the very start of the book
+  let leadingEmptyCount = 0;
+  while (
+    leadingEmptyCount < rawPages.length &&
+    rawPages[leadingEmptyCount].length === 1 &&
+    rawPages[leadingEmptyCount][0] === EMPTY_PAGE
+  ) {
+    leadingEmptyCount++;
+  }
+
+  // If the whole book is empty, keep at least one page; otherwise trim leading empty pages
+  const trimOffset = leadingEmptyCount < rawPages.length ? leadingEmptyCount : 0;
+  const pages = rawPages.slice(trimOffset);
+  const displayPages = rawDisplayPages.slice(trimOffset);
+
+  // 2. Extract chapters and adjust chapter pageIndex offsets by trimOffset
+  let rawChapters: ChapterItem[] = [];
   try {
-    chapters = await extractPdfChapters(pdf, displayPages);
+    rawChapters = await extractPdfChapters(pdf, rawDisplayPages);
   } catch (chErr) {
     console.warn("[PDF] Chapter extraction skipped:", chErr);
-    chapters = [];
+    rawChapters = [];
   }
+
+  const chapters: ChapterItem[] = rawChapters
+    .map((ch) => ({
+      ...ch,
+      pageIndex: Math.max(0, ch.pageIndex - trimOffset),
+    }))
+    .filter((ch) => ch.pageIndex < pages.length);
 
   return { pages, displayPages, coverUrl, chapters };
 }
