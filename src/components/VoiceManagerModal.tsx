@@ -225,17 +225,24 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
                         !isOnline || (downloadingId !== null && !isDownloading)
                       }
                       onClick={() => handleDownload(voice.id)}
-                      className="app-btn text-xs font-semibold px-3 py-1.5 rounded transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed w-full sm:w-auto"
+                      className="app-btn text-xs font-semibold px-3 py-1.5 rounded transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed w-full sm:w-auto min-w-[130px] relative overflow-hidden"
                     >
                       {isDownloading ? (
-                        <span className="flex items-center gap-1.5 font-mono">
-                          <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          <span>
-                            {downloadProgress > 0
-                              ? `${downloadProgress}%`
-                              : "Starting..."}
+                        <>
+                          {/* Visual progress bar fill */}
+                          <span
+                            className="absolute inset-y-0 left-0 bg-[var(--app-text)] opacity-15 transition-all duration-200"
+                            style={{ width: `${downloadProgress}%` }}
+                          />
+                          <span className="relative z-10 flex items-center justify-center gap-1.5 font-mono">
+                            <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            <span>
+                              {downloadProgress > 0
+                                ? `${downloadProgress}%`
+                                : "Connecting..."}
+                            </span>
                           </span>
-                        </span>
+                        </>
                       ) : !isOnline ? (
                         "Offline"
                       ) : (

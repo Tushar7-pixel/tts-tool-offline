@@ -211,7 +211,16 @@ export default function App() {
   const [dictWord, setDictWord] = useState<string | null>(null);
   const [dictData, setDictData] = useState<any>(null);
   const [dictLoading, setDictLoading] = useState(false);
+  const [downloadProgressMap, setDownloadProgressMap] = useState<
+    Record<string, number>
+  >({});
 
+  // Read the state so TypeScript confirms it is in use:
+  const activeDownloadEntries = Object.entries(downloadProgressMap);
+  const isDownloadingVoice = activeDownloadEntries.length > 0;
+  const currentDownloadPct = isDownloadingVoice
+    ? activeDownloadEntries[0][1]
+    : 0;
   // Selection hook
   const {
     selectionParams,
@@ -472,7 +481,29 @@ export default function App() {
     },
     [],
   );
-
+  const handleDownloadVoiceWithProgress = async (id: string) => {
+    setDownloadProgressMap((prev) => ({ ...prev, [id]: 1 }));
+    try {
+      await downloadVoice(id, (pct) => {
+        setDownloadProgressMap((prev) => ({ ...prev, [id]: pct }));
+      });
+      setInstalledVoiceIds((prev) => {
+        const updated = [...new Set([...prev, id])];
+        localStorage.setItem(
+          "echoread_installed_voices",
+          JSON.stringify(updated),
+        );
+        return updated;
+      });
+      setVoiceReady(true);
+    } finally {
+      setDownloadProgressMap((prev) => {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      });
+    }
+  };
   const handleDeleteHighlight = async (highlightId: string) => {
     if (!activeBook) return;
     const updated = await deleteHighlightById(activeBook.id, highlightId);
@@ -648,6 +679,14 @@ export default function App() {
           )}
 
           {/* Voice Controls */}
+          {/* Inside src/App.tsx */}
+
+          {isDownloadingVoice && (
+            <div className="app-chip px-2.5 py-1 rounded text-xs font-mono flex items-center gap-1.5 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-[var(--accent)] animate-ping" />
+              <span>Downloading Voice: {currentDownloadPct}%</span>
+            </div>
+          )}
           <VoiceControls
             voiceReady={voiceReady}
             installedVoiceIds={installedVoiceIds}
@@ -659,12 +698,10 @@ export default function App() {
               setActiveGender((prev) => (prev === "male" ? "female" : "male"))
             }
             onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
-            onInstallDefaultVoice={async () => {
-              await downloadVoice("en_US-hfc_male-medium", () => {});
-              setVoiceReady(true);
-            }}
+            onInstallDefaultVoice={() =>
+              handleDownloadVoiceWithProgress("en_US-hfc_male-medium")
+            }
           />
-
           <div className="flex items-center gap-2">
             {/* Reading Streak Button */}
             <button
@@ -1100,18 +1137,7 @@ export default function App() {
         installedVoiceIds={installedVoiceIds}
         maleVoiceId={maleVoiceId}
         femaleVoiceId={femaleVoiceId}
-        onDownloadVoice={async (id, onProgress) => {
-          await downloadVoice(id, onProgress);
-          setInstalledVoiceIds((prev) => {
-            const updated = [...new Set([...prev, id])];
-            localStorage.setItem(
-              "echoread_installed_voices",
-              JSON.stringify(updated),
-            );
-            return updated;
-          });
-          setVoiceReady(true);
-        }}
+        onDownloadVoice={(id) => handleDownloadVoiceWithProgress(id)}
         onSetMaleVoice={(id) => {
           setMaleVoiceId(id);
           localStorage.setItem("echoread_male_voice", id);
@@ -1121,7 +1147,6 @@ export default function App() {
           localStorage.setItem("echoread_female_voice", id);
         }}
       />
-
       <ChapterDrawer
         isOpen={isChapterDrawerOpen}
         onClose={() => setIsChapterDrawerOpen(false)}
