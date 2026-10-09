@@ -17,7 +17,29 @@ export function subscribeTtsStatus(cb: (status: TtsEngineStatus) => void) {
     statusListeners.delete(cb);
   };
 }
+const PIPER_WASM_FILES = [
+  "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.data",
+  "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.wasm",
+  "https://cdn.jsdelivr.net/npm/@diffusionstudio/piper-wasm@1.0.0/build/piper_phonemize.js"
+];
 
+export async function prewarmPhonemizerCache(): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const cache = await caches.open("piper-onnx-models-cache");
+    await Promise.all(
+      PIPER_WASM_FILES.map(async (url) => {
+        const match = await cache.match(url);
+        if (!match) {
+          const res = await fetch(url, { mode: "cors" });
+          if (res.ok) await cache.put(url, res);
+        }
+      })
+    );
+  } catch (err) {
+    console.warn("[TTS] Phonemizer cache pre-warming skipped:", err);
+  }
+}
 // Single outer worker on iPad/Safari to avoid duplicating 60MB model memory
 const WORKER_COUNT = 1;
 
@@ -243,52 +265,33 @@ export async function isVoiceInstalled(voiceId: string = DEFAULT_PIPER_VOICE): P
 /**
  * Download voice with progress and persistent storage backup
  */
-// in src/utils/tts.ts
 export async function downloadVoice(
   targetId: string = DEFAULT_PIPER_VOICE,
   onProgress?: (pct: number) => void
 ): Promise<void> {
-  let simulatedPct = 5;
-  if (onProgress) onProgress(simulatedPct);
-
-  // Fallback timer if the CDN streams chunks without Content-Length
-  const fallbackInterval = setInterval(() => {
-    if (simulatedPct < 85) {
-      simulatedPct += Math.floor(Math.random() * 6) + 2;
-      if (onProgress) onProgress(simulatedPct);
-    }
-  }, 400);
-
   try {
-    await piperTts.download(targetId, (progress: any) => {
-      if (!progress) return;
-
-      const loaded = progress.loaded ?? progress.received ?? progress.transferred;
-      const total = progress.total ?? progress.lengthComputable ? progress.total : null;
-
-      if (loaded && total && total > 0) {
-        clearInterval(fallbackInterval);
-        const actualPct = Math.min(99, Math.round((loaded * 100) / total));
-        if (onProgress) onProgress(actualPct);
+    prewarmPhonemizerCache().catch(() => { });
+    await piperTts.download(targetId, (progress) => {
+      if (onProgress && progress.total && progress.total > 0) {
+        const pct = Math.min(100, Math.round((progress.loaded * 100) / progress.total));
+        onProgress(pct);
       }
     });
 
-    clearInterval(fallbackInterval);
-    if (onProgress) onProgress(100);
-
-    // Save installed state to persistent storage
+    // Save installed state to persistent localStorage so Safari reloads never lose it
     const saved = localStorage.getItem("echoread_installed_voices");
     const currentList: string[] = saved ? JSON.parse(saved) : [];
     if (!currentList.includes(targetId)) {
       currentList.push(targetId);
       localStorage.setItem("echoread_installed_voices", JSON.stringify(currentList));
     }
-  } catch (err: any) {
-    clearInterval(fallbackInterval);
-    console.error("[TTS] Download failed:", err);
+    if (onProgress) onProgress(100);
+  } catch (err) {
+    console.warn("[TTS] Download error with piper-tts-web:", err);
     throw err;
   }
 }
+
 export async function synthesize(text: string, voiceId?: string): Promise<Blob> {
   const activeVoice = voiceId || DEFAULT_PIPER_VOICE;
   const cleanText = text.trim();

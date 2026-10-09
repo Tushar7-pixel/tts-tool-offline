@@ -41,7 +41,23 @@ export default defineConfig({
               },
             },
           },
-
+          {
+            urlPattern: ({ url }) =>
+              url.origin.includes('cdnjs.cloudflare.com') ||
+              url.origin.includes('huggingface.co') ||
+              url.origin.includes('cdn.jsdelivr.net'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'piper-onnx-models-cache',
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           // 2. Open Library Covers & Metadata (for offline bookshelf viewing)
           {
             urlPattern: ({ url }) =>
