@@ -1100,13 +1100,26 @@ export default function App() {
         installedVoiceIds={installedVoiceIds}
         maleVoiceId={maleVoiceId}
         femaleVoiceId={femaleVoiceId}
-        onDownloadVoice={async (id) => {
-          await downloadVoice(id, () => {});
-          setInstalledVoiceIds((prev) => [...new Set([...prev, id])]);
+        onDownloadVoice={async (id, onProgress) => {
+          await downloadVoice(id, onProgress);
+          setInstalledVoiceIds((prev) => {
+            const updated = [...new Set([...prev, id])];
+            localStorage.setItem(
+              "echoread_installed_voices",
+              JSON.stringify(updated),
+            );
+            return updated;
+          });
           setVoiceReady(true);
         }}
-        onSetMaleVoice={setMaleVoiceId}
-        onSetFemaleVoice={setFemaleVoiceId}
+        onSetMaleVoice={(id) => {
+          setMaleVoiceId(id);
+          localStorage.setItem("echoread_male_voice", id);
+        }}
+        onSetFemaleVoice={(id) => {
+          setFemaleVoiceId(id);
+          localStorage.setItem("echoread_female_voice", id);
+        }}
       />
 
       <ChapterDrawer

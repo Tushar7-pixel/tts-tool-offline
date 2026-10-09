@@ -1,13 +1,13 @@
 // src/components/VoiceManagerModal.tsx
-import React, { useState, useRef, useEffect } from 'react';
-import type { ReaderTheme } from '../utils/readerAppearance';
+import React, { useState, useRef, useEffect } from "react";
+import type { ReaderTheme } from "../utils/readerAppearance";
 import {
   AVAILABLE_VOICES,
   type VoiceOption,
   type VoiceGender,
   type VoiceAccent,
-} from '../utils/voiceCatalog';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
+} from "../utils/voiceCatalog";
+import { useOnlineStatus } from "../hooks/useOnlineStatus";
 
 interface VoiceManagerModalProps {
   isOpen: boolean;
@@ -16,7 +16,10 @@ interface VoiceManagerModalProps {
   installedVoiceIds: string[];
   maleVoiceId: string | null;
   femaleVoiceId: string | null;
-  onDownloadVoice: (voiceId: string) => Promise<void>;
+  onDownloadVoice: (
+    voiceId: string,
+    onProgress: (pct: number) => void,
+  ) => Promise<void>;
   onSetMaleVoice: (voiceId: string) => void;
   onSetFemaleVoice: (voiceId: string) => void;
 }
@@ -33,11 +36,11 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
   onSetFemaleVoice,
 }) => {
   const isOnline = useOnlineStatus();
-  const [genderFilter, setGenderFilter] = useState<'all' | VoiceGender>('all');
-  const [accentFilter, setAccentFilter] = useState<'all' | VoiceAccent>('all');
+  const [genderFilter, setGenderFilter] = useState<"all" | VoiceGender>("all");
+  const [accentFilter, setAccentFilter] = useState<"all" | VoiceAccent>("all");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
 
-  // Track active sample audio preview
   const [playingSampleId, setPlayingSampleId] = useState<string | null>(null);
   const sampleAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -70,7 +73,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
     setPlayingSampleId(voice.id);
 
     audio.play().catch((err) => {
-      console.warn('Sample audio play error:', err);
+      console.warn("Sample audio play error:", err);
       setPlayingSampleId(null);
     });
 
@@ -80,18 +83,22 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
   };
 
   const filteredVoices = AVAILABLE_VOICES.filter((voice) => {
-    if (genderFilter !== 'all' && voice.gender !== genderFilter) return false;
-    if (accentFilter !== 'all' && voice.accent !== accentFilter) return false;
+    if (genderFilter !== "all" && voice.gender !== genderFilter) return false;
+    if (accentFilter !== "all" && voice.accent !== accentFilter) return false;
     return true;
   });
 
   const handleDownload = async (id: string) => {
     if (!isOnline) return;
     setDownloadingId(id);
+    setDownloadProgress(0);
     try {
-      await onDownloadVoice(id);
+      await onDownloadVoice(id, (pct) => {
+        setDownloadProgress(pct);
+      });
     } finally {
       setDownloadingId(null);
+      setDownloadProgress(0);
     }
   };
 
@@ -118,31 +125,27 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
           </button>
         </div>
 
-        {/* Offline Warning Banner */}
-        {!isOnline && (
-          <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-amber-500 text-[11px] font-medium flex items-center justify-center gap-1.5 shrink-0">
-            <span>⚡</span>
-            <span>Offline mode: Streaming samples and downloading new voices are unavailable.</span>
-          </div>
-        )}
-
         {/* Filters */}
         <div className="p-3 sm:p-4 border-b border-inherit bg-black/5 flex flex-wrap gap-2 items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-[11px] app-muted font-medium">Gender:</span>
             <div className="flex rounded-md p-0.5 bg-black/10 border border-inherit">
-              {(['all', 'male', 'female'] as const).map((g) => (
+              {(["all", "male", "female"] as const).map((g) => (
                 <button
                   key={g}
                   type="button"
                   onClick={() => setGenderFilter(g)}
                   className={`text-[10px] sm:text-xs px-2 py-1 rounded capitalize font-medium transition cursor-pointer ${
                     genderFilter === g
-                      ? 'bg-amber-400 text-black font-bold shadow-sm'
-                      : 'app-muted hover:opacity-100'
+                      ? "bg-amber-400 text-black font-bold shadow-sm"
+                      : "app-muted hover:opacity-100"
                   }`}
                 >
-                  {g === 'all' ? 'All' : g === 'male' ? 'Male (M)' : 'Female (F)'}
+                  {g === "all"
+                    ? "All"
+                    : g === "male"
+                      ? "Male (M)"
+                      : "Female (F)"}
                 </button>
               ))}
             </div>
@@ -151,18 +154,18 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-[11px] app-muted font-medium">Accent:</span>
             <div className="flex rounded-md p-0.5 bg-black/10 border border-inherit">
-              {(['all', 'american', 'british'] as const).map((a) => (
+              {(["all", "american", "british"] as const).map((a) => (
                 <button
                   key={a}
                   type="button"
                   onClick={() => setAccentFilter(a)}
                   className={`text-[10px] sm:text-xs px-2 py-1 rounded capitalize font-medium transition cursor-pointer ${
                     accentFilter === a
-                      ? 'bg-amber-400 text-black font-bold shadow-sm'
-                      : 'app-muted hover:opacity-100'
+                      ? "bg-amber-400 text-black font-bold shadow-sm"
+                      : "app-muted hover:opacity-100"
                   }`}
                 >
-                  {a === 'all' ? 'All' : a === 'american' ? 'US' : 'UK'}
+                  {a === "all" ? "All" : a === "american" ? "US" : "UK"}
                 </button>
               ))}
             </div>
@@ -174,7 +177,7 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
           {filteredVoices.map((voice) => {
             const isInstalled = installedVoiceIds.includes(voice.id);
             const isSelected =
-              voice.gender === 'male'
+              voice.gender === "male"
                 ? maleVoiceId === voice.id
                 : femaleVoiceId === voice.id;
             const isDownloading = downloadingId === voice.id;
@@ -185,58 +188,65 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
                 key={voice.id}
                 className="app-control p-3 rounded-lg border border-inherit flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
               >
-                {/* Voice info & sample preview */}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold">{voice.name}</span>
                     <span className="text-[10px] app-chip px-1.5 py-0.5 rounded font-mono uppercase">
-                      {voice.gender === 'male' ? 'M' : 'F'} •{' '}
-                      {voice.accent === 'american' ? 'US' : 'UK'}
+                      {voice.gender === "male" ? "M" : "F"} •{" "}
+                      {voice.accent === "american" ? "US" : "UK"}
                     </span>
 
-                    {/* Sample Audio Button (Requires Online) */}
                     <button
                       type="button"
                       disabled={!isOnline}
                       onClick={() => handleToggleSample(voice)}
                       className={`text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                         isPlayingSample
-                          ? 'bg-amber-400 text-black font-bold'
-                          : 'app-btn border border-inherit'
+                          ? "bg-amber-400 text-black font-bold"
+                          : "app-btn border border-inherit"
                       }`}
-                      title={isOnline ? 'Listen to sample' : 'Internet connection required for audio samples'}
                     >
-                      <span>{isPlayingSample ? '⏹ Stop' : '▶ Sample'}</span>
+                      <span>{isPlayingSample ? "⏹ Stop" : "▶ Sample"}</span>
                     </button>
                   </div>
 
                   <p className="text-[11px] app-muted mt-1 truncate">
-                    "{voice.sampleText}" • <span className="font-mono">{voice.sizeMb}MB</span>
+                    "{voice.sampleText}" •{" "}
+                    <span className="font-mono">{voice.sizeMb}MB</span>
                   </p>
                 </div>
 
-                {/* Download / Set Role */}
+                {/* Download / Active Role */}
                 <div className="flex items-center gap-2 shrink-0">
                   {!isInstalled ? (
                     <button
                       type="button"
-                      disabled={!isOnline || isDownloading || downloadingId !== null}
+                      disabled={
+                        !isOnline || (downloadingId !== null && !isDownloading)
+                      }
                       onClick={() => handleDownload(voice.id)}
-                      title={isOnline ? undefined : 'Connect to the internet to download'}
                       className="app-btn text-xs font-semibold px-3 py-1.5 rounded transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed w-full sm:w-auto"
                     >
-                      {isDownloading
-                        ? 'Downloading...'
-                        : !isOnline
-                        ? 'Offline'
-                        : `Download (${voice.sizeMb}MB)`}
+                      {isDownloading ? (
+                        <span className="flex items-center gap-1.5 font-mono">
+                          <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          <span>
+                            {downloadProgress > 0
+                              ? `${downloadProgress}%`
+                              : "Starting..."}
+                          </span>
+                        </span>
+                      ) : !isOnline ? (
+                        "Offline"
+                      ) : (
+                        `Download (${voice.sizeMb}MB)`
+                      )}
                     </button>
                   ) : (
-                    /* Existing downloaded voices can still be assigned while offline */
                     <button
                       type="button"
                       onClick={() => {
-                        if (voice.gender === 'male') {
+                        if (voice.gender === "male") {
                           onSetMaleVoice(voice.id);
                         } else {
                           onSetFemaleVoice(voice.id);
@@ -244,29 +254,23 @@ export const VoiceManagerModal: React.FC<VoiceManagerModalProps> = ({
                       }}
                       className={`text-[11px] px-3 py-1 rounded font-semibold transition cursor-pointer border w-full sm:w-auto ${
                         isSelected
-                          ? 'bg-amber-400 text-black border-amber-400 font-bold'
-                          : 'app-btn border-inherit'
+                          ? "bg-amber-400 text-black border-amber-400 font-bold"
+                          : "app-btn border-inherit"
                       }`}
                     >
                       {isSelected
-                        ? voice.gender === 'male'
-                          ? '★ Male Active'
-                          : '★ Female Active'
-                        : voice.gender === 'male'
-                        ? 'Set Male'
-                        : 'Set Female'}
+                        ? voice.gender === "male"
+                          ? "★ Male Active"
+                          : "★ Female Active"
+                        : voice.gender === "male"
+                          ? "Set Male"
+                          : "Set Female"}
                     </button>
                   )}
                 </div>
               </div>
             );
           })}
-        </div>
-
-        <div className="p-3 border-t border-inherit/40 text-center app-muted text-[11px]">
-          {isOnline
-            ? 'Audio previews stream in memory without taking storage.'
-            : 'Installed voices function completely offline.'}
         </div>
       </div>
     </div>

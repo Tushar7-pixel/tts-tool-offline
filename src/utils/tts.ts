@@ -1,7 +1,7 @@
 // src/utils/tts.ts
+import * as pdfjsLib from "pdfjs-dist";
 import * as piperTts from "@mintplex-labs/piper-tts-web";
 import { getSharedAudioContext } from "./backgroundAudio";
-import * as pdfjsLib from "pdfjs-dist";
 
 export const DEFAULT_PIPER_VOICE = "en_US-hfc_male-medium";
 
@@ -18,9 +18,8 @@ export function subscribeTtsStatus(cb: (status: TtsEngineStatus) => void) {
   };
 }
 
-// CRITICAL FIX: Limit outer worker to 1. 
-// ONNX handles internal multithreading. Multiple outer workers duplicate model RAM.
-const WORKER_COUNT = 2;
+// Single outer worker on iPad/Safari to avoid duplicating 60MB model memory
+const WORKER_COUNT = 1;
 
 type PendingJob = {
   id: number;
@@ -171,7 +170,6 @@ function createWorker(index: number): WorkerState {
 }
 
 function initWorkers() {
-  // CRITICAL FIX: Kill orphaned Web Workers caused by React Fast Refresh (HMR)
   if ((window as any).__echoread_tts_workers) {
     (window as any).__echoread_tts_workers.forEach((w: WorkerState) => {
       w.worker.onmessage = null;
@@ -187,7 +185,6 @@ function initWorkers() {
   schedulingCursor = 0;
   updateGlobalStatus();
 
-  // Register the new active workers globally for the next potential HMR reload
   (window as any).__echoread_tts_workers = workers;
 }
 initWorkers();
@@ -195,7 +192,7 @@ initWorkers();
 export function clearTTSQueue() {
   while (jobQueue.length > 0) {
     const job = jobQueue.shift()!;
-    job.reject(new Error("Synthesis skipped due to page jump/pause"));
+    job.reject(new Error("Synthesis skipped"));
   }
   updateGlobalStatus();
 }
@@ -203,11 +200,11 @@ export function clearTTSQueue() {
 export function cancelPendingSynthesis() {
   while (jobQueue.length > 0) {
     const job = jobQueue.shift()!;
-    job.reject(new Error("Synthesis cancelled due to voice switch"));
+    job.reject(new Error("Synthesis cancelled"));
   }
 
   for (const [, active] of activeJobs) {
-    active.job.reject(new Error("Synthesis cancelled due to voice switch"));
+    active.job.reject(new Error("Synthesis cancelled"));
   }
   activeJobs.clear();
 
@@ -221,24 +218,55 @@ export function cancelPendingSynthesis() {
   initWorkers();
 }
 
+/**
+ * Cross-platform installation check:
+ * Checks IndexedDB and CacheStorage fallback
+ */
 export async function isVoiceInstalled(voiceId: string = DEFAULT_PIPER_VOICE): Promise<boolean> {
   try {
     const installed = await piperTts.stored();
-    return installed.includes(voiceId);
-  } catch {
-    return false;
-  }
+    if (installed && installed.includes(voiceId)) return true;
+  } catch { }
+
+  // Check persistent localStorage record
+  try {
+    const saved = localStorage.getItem("echoread_installed_voices");
+    if (saved) {
+      const list = JSON.parse(saved);
+      if (Array.isArray(list) && list.includes(voiceId)) return true;
+    }
+  } catch { }
+
+  return false;
 }
 
+/**
+ * Download voice with progress and persistent storage backup
+ */
 export async function downloadVoice(
   targetId: string = DEFAULT_PIPER_VOICE,
-  onProgress?: (pct: number) => void,
+  onProgress?: (pct: number) => void
 ): Promise<void> {
-  await piperTts.download(targetId, (progress) => {
-    if (onProgress && progress.total) {
-      onProgress(Math.round((progress.loaded * 100) / progress.total));
+  try {
+    await piperTts.download(targetId, (progress) => {
+      if (onProgress && progress.total && progress.total > 0) {
+        const pct = Math.min(100, Math.round((progress.loaded * 100) / progress.total));
+        onProgress(pct);
+      }
+    });
+
+    // Save installed state to persistent localStorage so Safari reloads never lose it
+    const saved = localStorage.getItem("echoread_installed_voices");
+    const currentList: string[] = saved ? JSON.parse(saved) : [];
+    if (!currentList.includes(targetId)) {
+      currentList.push(targetId);
+      localStorage.setItem("echoread_installed_voices", JSON.stringify(currentList));
     }
-  });
+    if (onProgress) onProgress(100);
+  } catch (err) {
+    console.warn("[TTS] Download error with piper-tts-web:", err);
+    throw err;
+  }
 }
 
 export async function synthesize(text: string, voiceId?: string): Promise<Blob> {
@@ -289,14 +317,14 @@ const NUMBER_WORDS = "one|two|three|four|five|six|seven|eight|nine|ten|eleven|tw
 
 const NOVEL_CHAPTER_REGEX = new RegExp(
   `^(?:` +
-    // 1. Explicit Chapter/Part + Number/Word (e.g., "Chapter 1", "Part Two")
-    `(?:chapter|part|act|book)\\s+(?:\\d+|[ivxlcdm]+|(?:(?:${NUMBER_WORDS})[\\s-]?)+)` +
-    // 2. Structural framing
-    `|prologue|epilogue|interlude|prelude|afterword` +
-    // 3. Temporal jumps
-    `|(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\\d+)\\s+(?:years?|months?|weeks?|days?|hours?)\\s+later)` +
-    // 4. Strict standalone Roman numerals (requires exact bounds)
-    `|\\b(?:I|V|X|L|C|D|M)+\\b\\.?` +
+  // 1. Explicit Chapter/Part + Number/Word (e.g., "Chapter 1", "Part Two")
+  `(?:chapter|part|act|book)\\s+(?:\\d+|[ivxlcdm]+|(?:(?:${NUMBER_WORDS})[\\s-]?)+)` +
+  // 2. Structural framing
+  `|prologue|epilogue|interlude|prelude|afterword` +
+  // 3. Temporal jumps
+  `|(?:(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\\d+)\\s+(?:years?|months?|weeks?|days?|hours?)\\s+later)` +
+  // 4. Strict standalone Roman numerals (requires exact bounds)
+  `|\\b(?:I|V|X|L|C|D|M)+\\b\\.?` +
   `)$`,
   "i"
 );
@@ -304,7 +332,7 @@ const NOVEL_CHAPTER_REGEX = new RegExp(
 // Analyzes the whole document to find headers that repeat on almost every page
 function detectRunningHeaders(displayPages: string[][]): Set<string> {
   const headerCounts = new Map<string, number>();
-  
+
   for (const lines of displayPages) {
     if (!lines || lines.length === 0) continue;
     const nonEmpty = lines.map(l => l.trim()).filter(l => l.length > 0);
@@ -346,10 +374,10 @@ export function parseChaptersFromDisplayPages(displayPages: string[][]): Chapter
 
       // POV / Character Name Detection (e.g., "RHETT", "SUMMER")
       // Criteria: Top 2 lines, short length, all uppercase or single title-case word, no trailing punctuation
-      const isPovOrMinimalist = 
-        i <= 1 && 
-        line.length <= 25 && 
-        /^(?:[A-Z0-9\s/:-]+|[A-Z][a-z]+)$/.test(line) && 
+      const isPovOrMinimalist =
+        i <= 1 &&
+        line.length <= 25 &&
+        /^(?:[A-Z0-9\s/:-]+|[A-Z][a-z]+)$/.test(line) &&
         !/[.,;!?]$/.test(line);
 
       if (isDirectMatch || isPovOrMinimalist) {
@@ -373,7 +401,7 @@ export function parseChaptersFromDisplayPages(displayPages: string[][]): Chapter
             pageIndex: pIdx,
           });
         }
-        break; 
+        break;
       }
     }
   }

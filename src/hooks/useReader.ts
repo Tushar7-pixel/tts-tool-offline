@@ -33,7 +33,7 @@ export function useReader(
   const [isPlaying, setIsPlaying] = useState(false);
   const [speed, setSpeed] = useState<number>(1.0);
 
-  const audioRef = useRef<HTMLAudioElement | null>(new Audio());
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const speedRef = useRef<number>(1.0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const sessionRef = useRef(0);
@@ -74,6 +74,18 @@ export function useReader(
       audioRef.current.playbackRate = speed;
     }
   }, [speed]);
+  useEffect(() => {
+    // In src/hooks/useReader.ts around line 79
+    const audio = new Audio();
+    (audio as any).playsInline = true;
+    (audio as any).webkitPlaysInline = true;
+    audio.preload = "auto";
+    audioRef.current = audio;
+    return () => {
+      audio.pause();
+      audio.src = "";
+    };
+  }, []);
 
   useEffect(() => {
     setCurrentPage(initialPage);
@@ -307,7 +319,16 @@ export function useReader(
         };
 
         lastPlaybackTickRef.current = Date.now();
-        await audio.play();
+        try {
+          await audio.play();
+        } catch (playErr: any) {
+          // If aborted by next track jump, ignore
+          if (playErr.name === "AbortError") return;
+          console.warn("[Reader] Audio play blocked by Safari user gesture requirement:", playErr);
+          await finishPlayback();
+        }
+
+        // await audio.play();
       } catch (error) {
         if (session !== sessionRef.current) return;
         console.error("[Reader] Audio playback error:", error);
@@ -364,6 +385,10 @@ export function useReader(
       setIsPlaying(false);
       await releaseWakeLock();
       return;
+    }
+    // Prime WebKit Media Context synchronously upon tap
+    if (audioRef.current) {
+      audioRef.current.play().catch(() => { });
     }
     isPlayingRef.current = true;
     setIsPlaying(true);
